@@ -1,8 +1,5 @@
 .idea/
-<<<<<<< HEAD
 AVASAG/
-=======
->>>>>>> 2935cf5458e9f9f1eb2a3f8cad86a2f486730e74
 .env
 __pycache__/
 WLASL/start_kit/raw_videos/
@@ -10,4 +7,3 @@ WLASL/start_kit/videos/
 Mediapipe_holistic/wlasl100_landmarks.csv
 Sign-Language-Recognition--MediaPipe-DTW/
 WLASL/
-
