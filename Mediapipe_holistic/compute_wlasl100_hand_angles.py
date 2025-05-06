@@ -9,8 +9,8 @@ from SLR_MediaPipe_DTW.models.hand_model import HandModel
 # Load paths from .env
 load_dotenv()
 wlasl_metadata_path = os.getenv("WLASL_METADATA_PATH")
-landmarks_csv_path = "wlasl100_landmarks.csv"
-output_csv_path = "wlasl100_hand_angles.csv"
+landmarks_csv_path = "Mediapipe_holistic/wlasl100_landmarks.csv"
+output_csv_path = "Mediapipe_holistic/wlasl100_hand_angles.csv"
 
 # Load metadata and CSV
 with open(wlasl_metadata_path, 'r') as f:
@@ -27,7 +27,9 @@ rh_columns = [col for col in df.columns if col.startswith("RH#") and col.endswit
 dummy_hand = np.zeros((21, 3))
 dummy_model = HandModel(dummy_hand)
 connection_pairs = list(dummy_model.connections)
-angle_labels = [f"Angle{{{a}-{b}}}" for a in connection_pairs for b in connection_pairs]
+angle_labels = [f"Angle{{{a}-{b}}}" for i, a in enumerate(connection_pairs)
+                                     for j, b in enumerate(connection_pairs)
+                                     if i < j]
 
 # Prepare CSV header
 header = ["video_id", "gloss"] + [f"LH_{label}" for label in angle_labels] + [f"RH_{label}" for label in angle_labels]

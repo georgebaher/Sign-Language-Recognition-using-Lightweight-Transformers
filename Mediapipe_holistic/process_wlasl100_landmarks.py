@@ -33,7 +33,7 @@ if os.path.exists(landmark_csv_path):
     existing_df = pd.read_csv(landmark_csv_path)
 
     if "video_id" in existing_df.columns:
-        processed_ids = set(existing_df["video_id"].astype(str).str.zfill(5))
+        processed_ids = set(existing_df["video_id"].astype(str).str.zfill(5))  # pad to be consistent with video_ids in metadata
 
     print(f"✅ {len(processed_ids or [])} videos already processed. Skipping those.")
 
@@ -43,7 +43,7 @@ missing_videos = []
 failed_videos = []
 file_exists = os.path.exists(landmark_csv_path)
 cnt=0
-for gloss in tqdm(glosses, desc="Glosses"):
+for gloss in tqdm(glosses, desc="Glosses", unit="gloss", colour='green'):
     gloss_label = gloss['gloss']
     for instance in gloss['instances']:
         video_id = str(instance['video_id'])  # Ensure consistent type
@@ -58,7 +58,6 @@ for gloss in tqdm(glosses, desc="Glosses"):
             missing_videos.append(video_id)
             continue
 
-        print(f"📹 Processing {video_id} for gloss '{gloss_label}'")
         try:
             df = processor.process_video(video_path, show_landmarks=False, gloss=gloss_label)
             if df.empty:
@@ -67,8 +66,7 @@ for gloss in tqdm(glosses, desc="Glosses"):
             new_videos_processed.append(video_id)
             df.to_csv(landmark_csv_path, mode='a', header=not file_exists, index=False)
             file_exists = True
-            print(f"✅ Saved video <{video_id}.mp4> landmarks to {landmark_csv_path}")
-            processed_ids.add(video_id)  # to avoid reprocessing in the same run
+            print(f"✅ Saved <video: {video_id}.mp4, gloss: {gloss_label}> landmarks to {landmark_csv_path}")
         except Exception as e:
             print(f"❌ Error processing {video_id}: {e}")
             failed_videos.append(video_id)
