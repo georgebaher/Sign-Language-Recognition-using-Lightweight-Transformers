@@ -75,3 +75,8 @@ class HandModel(object):
             print("Zero norm detected in vector angle")
 
         return np.arccos(dot_product / norm)
+
+if __name__ == "__main__":
+    handModel= HandModel(landmarks=[ f for f in range(100, 163) ])
+    print(handModel.connections)
+    print(handModel.feature_vector)

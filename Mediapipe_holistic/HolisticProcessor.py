@@ -94,7 +94,7 @@ class HolisticProcessor:
         cv2.imshow(window_name, frame_bgr)
         return not (cv2.waitKey(1) & 0xFF == 27)
 
-    def _extract_landmarks_as_nparray(self, results, pad_val=0):
+    def _extract_landmarks_as_nparray(self, results, pad_val=-1):
         """
         Extracts landmarks from MediaPipe results into a flat NumPy array.
 
