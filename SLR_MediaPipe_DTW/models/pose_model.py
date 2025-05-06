@@ -15,6 +15,7 @@ class PoseModel(object):
     def __init__(self, landmarks: List[float]):
         # Define the pose connections
         self.connections = list(mp.solutions.pose.POSE_CONNECTIONS)
+        print(self.connections)
 
         # Create feature vector (angles between unique connection pairs)
         landmarks = np.array(landmarks).reshape((33, 3))  # 33 pose landmarks
