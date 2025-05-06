@@ -94,7 +94,7 @@ class HolisticProcessor:
         cv2.imshow(window_name, frame_bgr)
         return not (cv2.waitKey(1) & 0xFF == 27)
 
-    def _extract_landmarks_as_nparray(self, results, pad_val=-1):
+    def _extract_landmarks_as_nparray(self, results, pad_val=-2):
         """
         Extracts landmarks from MediaPipe results into a flat NumPy array.
 
@@ -148,7 +148,7 @@ class HolisticProcessor:
 
         frames_data = []
 
-        with tqdm(total=frame_count, desc=f"Processing <{video_id}>", unit='frame', colour='green') as pbar:
+        with tqdm(total=frame_count, desc=f"Processing <{video_id}> for gloss '{gloss}'", unit='frame', colour='white', leave=False) as pbar:
             while True:
                 success, frame = cap.read()
                 if not success:

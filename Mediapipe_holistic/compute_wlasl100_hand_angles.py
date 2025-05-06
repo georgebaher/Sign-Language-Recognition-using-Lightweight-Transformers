@@ -39,7 +39,9 @@ rh_columns = [col for col in df.columns if col.startswith("RH#") and col.endswit
 dummy_hand = np.zeros((21, 3))
 dummy_model = HandModel(dummy_hand)
 connection_pairs = list(dummy_model.connections)
-angle_labels = [f"Angle{{{a}-{b}}}" for a in connection_pairs for b in connection_pairs]
+angle_labels = [f"Angle{{{a}-{b}}}" for i, a in enumerate(connection_pairs)
+                                     for j, b in enumerate(connection_pairs)
+                                     if i < j]
 
 # Prepare CSV header
 header = ["video_id", "gloss"] + [f"LH_{label}" for label in angle_labels] + [f"RH_{label}" for label in angle_labels]
