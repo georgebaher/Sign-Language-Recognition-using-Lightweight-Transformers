@@ -4,11 +4,6 @@ AVASAG/
 __pycache__/
 WLASL/start_kit/raw_videos/
 WLASL/start_kit/videos/
-Mediapipe_holistic/wlasl100_landmarks.csv
-Mediapipe_holistic/wlasl100_landmarks.parquet
-Mediapipe_holistic/wlasl100_hand_angles.csv
-Mediapipe_holistic/wlasl100_hand_angles.parquet
-Mediapipe_holistic/wlasl100_pose_angles.csv
-Mediapipe_holistic/wlasl100_pose_angles.parquet
+Mediapipe_holistic/data/
 Sign-Language-Recognition--MediaPipe-DTW/
 WLASL/

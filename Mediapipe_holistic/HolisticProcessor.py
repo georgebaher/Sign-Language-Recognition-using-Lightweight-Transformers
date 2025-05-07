@@ -130,7 +130,7 @@ class HolisticProcessor:
         - gloss (str): gloss of the video, if provided.
 
         Returns:
-        - pd.DataFrame: A DataFrame of landmark features per frame.
+        - pd.DataFrame: A DataFrame of landmark features per frame with header.
         """
         cap = cv2.VideoCapture(video_path)
         if not cap.isOpened():
