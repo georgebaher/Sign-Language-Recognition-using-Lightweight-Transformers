@@ -26,7 +26,7 @@ def get_features_by_option(video_id: str,
     hand_angles = hand_angles_df[hand_angles_df["video_id"] == video_id]
     pose_angles = pose_angles_df[pose_angles_df["video_id"] == video_id]
 
-    # Drop metadata columns (video_id, gloss)
+    # Drop wlasl_csv_exports columns (video_id, gloss)
     def drop_meta(df):
         return df.drop(columns=["video_id", "gloss"], errors="ignore")
 
@@ -46,7 +46,7 @@ def get_features_by_option(video_id: str,
         hand = hand_angles_df[hand_angles_df["video_id"] == video_id].reset_index(drop=True)
         pose = pose_angles_df[pose_angles_df["video_id"] == video_id].reset_index(drop=True)
 
-        # Drop metadata if needed
+        # Drop wlasl_csv_exports if needed
         hand = hand.drop(columns=["video_id", "gloss"], errors="ignore")
         pose = pose.drop(columns=["video_id", "gloss"], errors="ignore")
 

@@ -16,7 +16,7 @@ metadata_path = os.getenv("WLASL_METADATA_PATH")
 landmarks_path = os.getenv("WLASL100_LANDMARKS_PATH")
 output_path = os.getenv("WLASL100_HAND_ANGLES_PATH")
 
-# Load metadata + landmarks
+# Load wlasl_csv_exports + landmarks
 with open(metadata_path) as f:
     glosses = json.load(f)[:100]
 landmarks_df = pd.read_parquet(landmarks_path)
