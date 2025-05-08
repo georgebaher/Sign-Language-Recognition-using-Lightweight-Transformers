@@ -13,8 +13,8 @@ start = time.time()
 # Load paths
 load_dotenv()
 metadata_path = os.getenv("WLASL_METADATA_PATH")
-landmarks_path = "data/wlasl100_landmarks.parquet"
-output_path = "data/wlasl100_hand_angles.parquet"
+landmarks_path = os.getenv("WLASL100_LANDMARKS_PATH")
+output_path = os.getenv("WLASL100_HAND_ANGLES_PATH")
 
 # Load metadata + landmarks
 with open(metadata_path) as f:
@@ -25,8 +25,7 @@ landmarks_df = pd.read_parquet(landmarks_path)
 processed_ids, existing_df = load_existing_ids(output_path)
 print(f"✅ {len(processed_ids)} videos already processed. Skipping those.")
 
-# Prepare header and trackers
-header = get_hand_header()
+# Prepare output and trackers
 skipped_videos, failed_videos, processed_videos = [], [], []
 all_dfs = []
 
@@ -45,7 +44,6 @@ for gloss in tqdm(glosses, desc="Glosses", unit='glosss', colour='green'):
             if df.empty:
                 print(f"⚠️ Skipping empty video_id: {video_id}")
                 continue
-            df.columns = header
             all_dfs.append(df)
             processed_videos.append(video_id)
         except Exception as e:

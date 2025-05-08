@@ -4,12 +4,14 @@ from SLR_MediaPipe_DTW.models.pose_model import PoseModel
 
 def compute_pose_angles(df: pd.DataFrame, video_id: str, gloss: str) -> pd.DataFrame:
     """
-    :param df: landmarks dataframe (can contatin single video frames or multiple video frames)
-    :param video_id: video id
-    :param gloss: gloss
-    :return: dataframe with hand angles without header
+    Compute pose angles from pre-labeled landmark DataFrame.
+
+    :param df: DataFrame containing columns like 'P#0_x', ..., 'P#32_z'
+    :param video_id: The ID of the video to process
+    :param gloss: The associated gloss
+    :return: DataFrame with angle vectors for each frame (with header)
     """
-    pose_cols = [col for col in df.columns if col.startswith("P#") and col.endswith(("_x", "_y", "_z"))]
+    pose_cols = [f"P#{i}_{axis}" for i in range(33) for axis in ("x", "y", "z")]
     vid_df = df[df["video_id"] == video_id]
     rows = []
 
@@ -21,9 +23,11 @@ def compute_pose_angles(df: pd.DataFrame, video_id: str, gloss: str) -> pd.DataF
             rows.append(row_data)
         except Exception as e:
             print(f"⚠️ Error in video {video_id}: {e}")
-    return pd.DataFrame(rows)
 
-def get_pose_header():
+    # Return DataFrame with proper column headers
+    return pd.DataFrame(rows, columns=get_pose_header())
+
+def get_pose_header() -> list:
     dummy = PoseModel(np.zeros((33, 3)))
     conns = list(dummy.connections)
     angle_labels = [f"Angle{{{a}-{b}}}" for i, a in enumerate(conns) for j, b in enumerate(conns) if i < j]

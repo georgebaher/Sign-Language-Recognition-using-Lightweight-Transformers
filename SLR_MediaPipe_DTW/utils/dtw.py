@@ -1,48 +1,26 @@
 import pandas as pd
 from fastdtw import fastdtw
-import numpy as np
-from ..models.sign_model import  SignModel
+from typing import List
 
 
-def dtw_distances(recorded_sign: SignModel, reference_signs: pd.DataFrame):
+def dtw_distances(recorded_embedding: List[List[float]], reference_signs: pd.DataFrame) -> pd.DataFrame:
     """
-    Use DTW to compute similarity between the recorded sign & the reference signs
+    Use DTW to compute similarity between a recorded embedding and reference embeddings.
 
-    :param recorded_sign: a SignModel object containing the data gathered during record
-    :param reference_signs: pd.DataFrame
-                            columns : name, dtype: str
-                                      sign_model, dtype: SignModel
-                                      distance, dtype: float64
-    :return: Return a sign dictionary sorted by the distances from the recorded sign
+    :param recorded_embedding: List of frames; each frame is a flat list of floats (e.g., angles or flattened landmarks)
+    :param reference_signs: pd.DataFrame with columns:
+                            - name: str
+                            - embedding: List[List[float]]
+                            - distance: float
+    :return: DataFrame sorted by DTW distance (ascending)
     """
-    # Embeddings of the recorded sign
-    rec_left_hand = recorded_sign.lh_embedding
-    rec_right_hand = recorded_sign.rh_embedding
 
     for idx, row in reference_signs.iterrows():
-        # Initialize the row variables
-        ref_sign_name, ref_sign_model, _ = row
-        distance=0
+        reference_embedding = row["embedding"]
 
-        # If the reference sign has the same number of hands compute fastdtw
-        if (recorded_sign.has_left_hand == ref_sign_model.has_left_hand) and (
-            recorded_sign.has_right_hand == ref_sign_model.has_right_hand
-        ):
-            ref_left_hand = ref_sign_model.lh_embedding
-            ref_right_hand = ref_sign_model.rh_embedding
+        # DTW with Euclidean distance between frame vectors
+        distance, _ = fastdtw(recorded_embedding, reference_embedding, dist=2)
 
-            if recorded_sign.has_left_hand:
-                distance += list(fastdtw(rec_left_hand, ref_left_hand))[0]
-            if recorded_sign.has_right_hand:
-                distance += list(fastdtw(rec_right_hand, ref_right_hand))[0]
+        reference_signs.at[idx, "distance"] = distance
 
-        # If not, distance equals infinity
-        else:
-            distance = np.inf
-
-        # Update distance in the DataFrame
-        reference_signs.loc[idx, "distance"] = distance
-
-    return reference_signs.sort_values(by=["distance"])
-
-
+    return reference_signs.sort_values(by="distance").reset_index(drop=True)

@@ -4,13 +4,16 @@ from SLR_MediaPipe_DTW.models.hand_model import HandModel
 
 def compute_hand_angles(df: pd.DataFrame, video_id: str, gloss: str) -> pd.DataFrame:
     """
-    :param df: landmarks dataframe (can contatin single video frames or multiple video frames)
-    :param video_id: video id
-    :param gloss: gloss
-    :return: dataframe with hand angles without header
-    """
-    lh_cols = [col for col in df.columns if col.startswith("LH#") and col.endswith(("_x", "_y", "_z"))]
-    rh_cols = [col for col in df.columns if col.startswith("RH#") and col.endswith(("_x", "_y", "_z"))]
+       Compute hand angles from pre-labeled landmark DataFrame.
+
+       :param df: DataFrame containing columns like 'LH#0_x', ..., 'RH#20_z'
+       :param video_id: The ID of the video to process
+       :param gloss: The associated gloss
+       :return: DataFrame with angle vectors for each frame
+       """
+    # Assume LH#*_x, *_y, *_z and RH#*_x, *_y, *_z already exist
+    lh_cols = [f"LH#{i}_{axis}" for i in range(21) for axis in ("x", "y", "z")]
+    rh_cols = [f"RH#{i}_{axis}" for i in range(21) for axis in ("x", "y", "z")]
 
     vid_df = df[df["video_id"] == video_id]
     rows = []
@@ -25,9 +28,11 @@ def compute_hand_angles(df: pd.DataFrame, video_id: str, gloss: str) -> pd.DataF
             rows.append(row_data)
         except Exception as e:
             print(f"⚠️ Error in video {video_id}: {e}")
-    return pd.DataFrame(rows)
 
-def get_hand_header():
+    # Create DataFrame with header
+    return pd.DataFrame(rows, columns=get_hand_header())
+
+def get_hand_header() -> list:
     dummy = HandModel(np.zeros((21, 3)))
     conns = list(dummy.connections)
     angle_labels = [f"Angle{{{a}-{b}}}" for i, a in enumerate(conns) for j, b in enumerate(conns) if i < j]
