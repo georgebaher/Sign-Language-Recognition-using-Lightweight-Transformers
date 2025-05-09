@@ -10,7 +10,7 @@ from collections import Counter
 from SLR_MediaPipe_DTW.utils.get_features_by_option import get_features_by_option
 from SLR_MediaPipe_DTW.utils.dtw import dtw_distances
 from SLR_MediaPipe_DTW.utils.plt_eval_metrics import plot_dtw_evaluation_results
-from SLR_MediaPipe_DTW.misc.analyze_wlasl100_metadata import analyze_wlasl_metadata
+from SLR_MediaPipe_DTW.misc.analyze_wlasl import get_train_val_test_split_per_gloss
 
 
 class DTWEvaluator:
@@ -33,7 +33,7 @@ class DTWEvaluator:
         self.landmarks_df = pd.read_parquet(self.landmarks_path)
         self.hand_angles_df = pd.read_parquet(self.hand_angles_path)
         self.pose_angles_df = pd.read_parquet(self.pose_angles_path)
-        self.gloss_video_ids = analyze_wlasl_metadata(self.metadata_path, self.n_glosses)
+        self.gloss_video_ids = get_train_val_test_split_per_gloss(self.metadata_path, self.n_glosses)
 
         self.total_correct = 0
         self.total_tests = 0
@@ -152,6 +152,10 @@ if __name__ == "__main__":
     # print(results_df.to_string(index=False))
     # results_df.to_parquet("dtw_evaluation_results.parquet", index=False)
 
+<<<<<<< HEAD
     x = pd.read_parquet("dtw_evaluation_results.parquet")
+=======
+    x = pd.read_parquet("C:\\Users\\georg\\PycharmProjects\\Acht\\SLR_MediaPipe_DTW\\dtw_evaluation_results.parquet")
+>>>>>>> 3ce4d5bbad98f13ca6a521d2acf25b297f51eca7
     plot_dtw_evaluation_results(x)
 

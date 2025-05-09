@@ -18,7 +18,7 @@ videos_path = os.getenv("WLASL_VIDEOS_PATH")
 # data output path
 landmark_parquet_path = os.getenv("WLASL100_LANDMARKS_PATH")
 
-# Load metadata
+# Load wlasl_csv_exports
 with open(metadata_path, 'r') as f:
     glosses = json.load(f)[:100]
 

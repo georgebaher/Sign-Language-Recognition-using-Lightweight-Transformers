@@ -13,55 +13,54 @@ class HandModel(object):
     """
 
     def __init__(self, landmarks: List[float]):
-        # Define the connections
         self.connections = list(mp.solutions.holistic.HAND_CONNECTIONS)
-
-        # Create feature vector (list of angles between unique connection pairs)
         landmarks = np.array(landmarks).reshape((21, 3))
         self.feature_vector = self._get_feature_vector(landmarks)
 
     def _get_feature_vector(self, landmarks: np.ndarray) -> List[float]:
-        """
-        Params
-            landmarks: numpy array of shape (21, 3)
-        Return
-            List of length C * (C - 1) / 2 containing all angles between unique connection pairs
-        """
         connections = self._get_connections_from_landmarks(landmarks)
 
         angles_list = []
+        # print(connections)
         for i in range(len(connections)):
             for j in range(i + 1, len(connections)):
-                angle = self._get_angle_between_vectors(connections[i], connections[j])
-                angles_list.append(angle if angle == angle else 0)
+                u, v = connections[i], connections[j]
+                # If either connection vector has -2 in it, skip (means missing)
+                if np.any(u == -2) or np.any(v == -2):
+                    angles_list.append(-2)
+                else:
+                    angle = self._get_angle_between_vectors(u, v)
+                    angles_list.append(angle if angle == angle else -2)  # Handle NaN
         return angles_list
 
     def _get_connections_from_landmarks(self, landmarks: np.ndarray) -> List[np.ndarray]:
-        """
-        Params
-            landmarks: numpy array of shape (21, 3)
-        Return
-            List of vectors representing hand connections
-        """
-        return [landmarks[b] - landmarks[a] for a, b in self.connections]
+        vectors = []
+        for a, b in self.connections:
+            if np.any(landmarks[a] == -2) or np.any(landmarks[b] == -2):
+                #print(f"Skipping connection ({a}, {b}) due to missing landmark")
+                vectors.append(np.array([-2, -2, -2]))  # Placeholder for missing
+            else:
+                vectors.append(landmarks[b] - landmarks[a])
+        return vectors
 
     @staticmethod
     def _get_angle_between_vectors(u: np.ndarray, v: np.ndarray) -> float:
-        """
-        Args
-            u, v: 3D vectors representing two connections
-        Return
-            Angle between the two vectors
-        """
         dot_product = np.dot(u, v)
         norm = np.linalg.norm(u) * np.linalg.norm(v)
         if norm == 0:
-            return 0
+            return -2  # Also pad with -2 for degenerate cases
         return np.arccos(np.clip(dot_product / norm, -1.0, 1.0))
 
 
 if __name__ == "__main__":
-    handModel = HandModel(landmarks=[f for f in range(100, 163)])
+    # Example: simulating a few missing landmarks with -2s
+    test_landmarks = [i for i in range(63)]
+    test_landmarks[6] = -2  # corrupt landmark 2 (x)
+    test_landmarks[7] = -2  # corrupt landmark 2 (y)
+    test_landmarks[8] = -2  # corrupt landmark 2 (z)
+
+    print(test_landmarks)
+    handModel = HandModel(landmarks=test_landmarks)
     print(f"# of connections: {len(handModel.connections)}")
     print(f"Feature vector length: {len(handModel.feature_vector)}")
-    print(handModel.feature_vector)
+    print(f"Missing angles: {handModel.feature_vector.count(-2)}")

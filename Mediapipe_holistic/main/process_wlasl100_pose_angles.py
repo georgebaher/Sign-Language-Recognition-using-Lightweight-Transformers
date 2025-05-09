@@ -17,7 +17,7 @@ project_root = os.path.dirname(os.path.dirname(__file__))  # Goes up 2 levels to
 landmarks_path = os.getenv("WLASL100_LANDMARKS_PATH")
 output_path = os.getenv("WLASL100_POSE_ANGLES_PATH")
 
-# Load metadata + landmarks
+# Load wlasl_csv_exports + landmarks
 with open(metadata_path) as f:
     glosses = json.load(f)[:100]
 landmarks_df = pd.read_parquet(landmarks_path)
