@@ -92,15 +92,15 @@ class DTWEvaluator:
                 result_df = dtw_distances(test_embedding, reference_df_full.copy())
                 end = time.time()
 
-                # # predict by top k
-                # k = max(1, ceil(0.1 * len(result_df)))  # At least one
-                # top_k_glosses = result_df.iloc[:k]["name"]
-                # counter = Counter(top_k_glosses)
-                # predicted_gloss, vote_count = counter.most_common(1)[0]
-                # confidence = vote_count / k
+                # predict by top k
+                k = max(1, ceil(0.1 * len(result_df)))  # At least one
+                top_k_glosses = result_df.iloc[:k]["name"]
+                counter = Counter(top_k_glosses)
+                predicted_gloss, vote_count = counter.most_common(1)[0]
+                confidence = vote_count / k
 
-                # predict by closest match
-                predicted_gloss = result_df.iloc[0]["name"]
+                # # predict by closest match
+                # predicted_gloss = result_df.iloc[0]["name"]
 
                 is_correct = predicted_gloss == gloss
 
@@ -108,8 +108,8 @@ class DTWEvaluator:
                 self.total_tests += 1
                 self.total_time += (end - start)
 
-                print(f"🧪 Gloss: {gloss}, Video_id: {test_vid} → Predicted: {predicted_gloss} ")
-                      #f"| Votes: {vote_count}/{k} ({confidence:.0%}) | {'✅' if is_correct else '❌'}")
+                print(f"🧪 Gloss: {gloss}, Video_id: {test_vid} → Predicted: {predicted_gloss} "
+                      f"| Votes: {vote_count}/{k} ({confidence:.0%}) | {'✅' if is_correct else '❌'}")
 
         self._report()
 
@@ -126,31 +126,31 @@ class DTWEvaluator:
 
 
 if __name__ == "__main__":
-    results = []
-
-    n_list = [1,2,3,4,5,10,15,20,25,30,35,40,45,50]
-    feature_options = ["hand_landmarks", "hand+pose_landmarks", "hand_angles", "hand+pose_angles"]
-
-    for feature_option in feature_options:
-        for n in tqdm(n_list, desc=f"Evaluating {feature_option}", leave=False):
-            print(f"\n🔄 Running DTW Evaluation | Features: {feature_option} | Glosses: {n}")
-            evaluator = DTWEvaluator(feature_option=feature_option, n_glosses=n)
-            evaluator.evaluate()
-
-            # Store results
-            results.append({
-                "n_glosses": n,
-                "feature_option": feature_option,
-                "accuracy": round(evaluator.accuracy, 2),
-                "avg_dtw_time_sec": round(evaluator.avg_time, 4),
-                "num_tests": evaluator.total_tests
-            })
-
-    # Display results
-    results_df = pd.DataFrame(results)
-    print("\n📋 Summary of All Runs:")
-    print(results_df.to_string(index=False))
-    results_df.to_parquet("dtw_evaluation_results.parquet", index=False)
+    # results = []
+    #
+    # n_list = [1, 2, 3, 4, 5, 10, 15, 20, 25, 30]
+    # feature_options = ["hand_landmarks", "hand+pose_landmarks", "hand_angles", "hand+pose_angles"]
+    #
+    # for feature_option in feature_options:
+    #     for n in tqdm(n_list, desc=f"Evaluating {feature_option}", leave=False):
+    #         print(f"\n🔄 Running DTW Evaluation | Features: {feature_option} | Glosses: {n}")
+    #         evaluator = DTWEvaluator(feature_option=feature_option, n_glosses=n)
+    #         evaluator.evaluate()
+    #
+    #         # Store results
+    #         results.append({
+    #             "n_glosses": n,
+    #             "feature_option": feature_option,
+    #             "accuracy": round(evaluator.accuracy, 2),
+    #             "avg_dtw_time_sec": round(evaluator.avg_time, 4),
+    #             "num_tests": evaluator.total_tests
+    #         })
+    #
+    # # Display results
+    # results_df = pd.DataFrame(results)
+    # print("\n📋 Summary of All Runs:")
+    # print(results_df.to_string(index=False))
+    # results_df.to_parquet("dtw_evaluation_results.parquet", index=False)
 
     x = pd.read_parquet("dtw_evaluation_results.parquet")
     plot_dtw_evaluation_results(x)
