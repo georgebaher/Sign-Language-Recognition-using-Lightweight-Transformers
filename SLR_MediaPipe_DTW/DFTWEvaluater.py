@@ -152,10 +152,7 @@ if __name__ == "__main__":
     # print(results_df.to_string(index=False))
     # results_df.to_parquet("dtw_evaluation_results.parquet", index=False)
 
-<<<<<<< HEAD
+
     x = pd.read_parquet("dtw_evaluation_results.parquet")
-=======
-    x = pd.read_parquet("C:\\Users\\georg\\PycharmProjects\\Acht\\SLR_MediaPipe_DTW\\dtw_evaluation_results.parquet")
->>>>>>> 3ce4d5bbad98f13ca6a521d2acf25b297f51eca7
     plot_dtw_evaluation_results(x)
 
