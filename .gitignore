@@ -1,9 +1,8 @@
 .idea/
 AVASAG/
-.env
 __pycache__/
 WLASL/start_kit/raw_videos/
 WLASL/start_kit/videos/
-Mediapipe_holistic/data/
+Mediapipe_holistic/data/parquet
 Sign-Language-Recognition--MediaPipe-DTW/
 WLASL/
