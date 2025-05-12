@@ -37,7 +37,7 @@ class HandModel(object):
         vectors = []
         for a, b in self.connections:
             if np.any(landmarks[a] == -2) or np.any(landmarks[b] == -2):
-                #print(f"Skipping connection ({a}, {b}) due to missing landmark")
+                # print(f"Skipping connection ({a}, {b}) due to missing landmark")
                 vectors.append(np.array([-2, -2, -2]))  # Placeholder for missing
             else:
                 vectors.append(landmarks[b] - landmarks[a])
@@ -53,12 +53,11 @@ class HandModel(object):
 
 
 if __name__ == "__main__":
-    # Example: simulating a few missing landmarks with -2s
+    # TESTING ...
     test_landmarks = [i for i in range(63)]
-    test_landmarks[6] = -2  # corrupt landmark 2 (x)
-    test_landmarks[7] = -2  # corrupt landmark 2 (y)
-    test_landmarks[8] = -2  # corrupt landmark 2 (z)
-
+    test_landmarks[6] = -2  # corrupt landmark 3 (x)
+    test_landmarks[7] = -2  # corrupt landmark 3 (y)
+    test_landmarks[8] = -2  # corrupt landmark 3 (z)
     print(test_landmarks)
     handModel = HandModel(landmarks=test_landmarks)
     print(f"# of connections: {len(handModel.connections)}")

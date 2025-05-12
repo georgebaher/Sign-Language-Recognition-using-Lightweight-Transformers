@@ -36,7 +36,7 @@ class PoseModel(object):
         vectors = []
         for a, b in self.connections:
             if np.any(landmarks[a] == -2) or np.any(landmarks[b] == -2):
-                print(f"Skipping connection ({a}, {b}) due to missing landmark")
+                # print(f"Skipping connection ({a}, {b}) due to missing landmark")
                 vectors.append(np.array([-2, -2, -2]))
             else:
                 vectors.append(landmarks[b] - landmarks[a])
@@ -52,11 +52,12 @@ class PoseModel(object):
 
 
 if __name__ == "__main__":
-    # Create valid pose input and corrupt landmark 5
+    # TESTING ...
     pose_landmarks = [f for f in range(100, 199)]  # 33 x 3 = 99
-    pose_landmarks[15] = -2  # x of landmark 5
-    pose_landmarks[16] = -2  # y of landmark 5
-    pose_landmarks[17] = -2  # z of landmark 5
+    pose_landmarks[15] = -2  # x of landmark 6
+    pose_landmarks[16] = -2  # y of landmark 6
+    pose_landmarks[17] = -2  # z of landmark 6
+    print(pose_landmarks)
 
     poseModel = PoseModel(landmarks=pose_landmarks)
     print(f"# of pose connections: {len(poseModel.connections)}")

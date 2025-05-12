@@ -1,6 +1,7 @@
 import os
 import pandas as pd
 
+
 def load_existing_ids(parquet_path):
     """
     :param parquet_path: path to parquet file containing landmarks
@@ -10,6 +11,7 @@ def load_existing_ids(parquet_path):
         df = pd.read_parquet(parquet_path)
         return set(df["video_id"]), df
     return set(), None
+
 
 def save_and_merge(new_df: pd.DataFrame, path: str, existing_df: pd.DataFrame = None):
     """

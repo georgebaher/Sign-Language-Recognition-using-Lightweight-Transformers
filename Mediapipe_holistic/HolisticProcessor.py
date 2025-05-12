@@ -6,6 +6,7 @@ from tqdm import tqdm
 from dotenv import load_dotenv
 import mediapipe as mp
 
+
 class HolisticProcessor:
     """
     A class to extract and process holistic landmarks (pose, hands) from videos using MediaPipe Holistic.
@@ -44,7 +45,6 @@ class HolisticProcessor:
             min_detection_confidence=0.5,
             min_tracking_confidence=0.5
         )
-
 
     def _generate_column_names(self):
         """
@@ -85,9 +85,11 @@ class HolisticProcessor:
             self.mp_drawing.draw_landmarks(frame_bgr, results.pose_landmarks, self.mp_holistic.POSE_CONNECTIONS)
         if "hand" in self.extract:
             if results.left_hand_landmarks:
-                self.mp_drawing.draw_landmarks(frame_bgr, results.left_hand_landmarks, self.mp_holistic.HAND_CONNECTIONS)
+                self.mp_drawing.draw_landmarks(frame_bgr, results.left_hand_landmarks,
+                                               self.mp_holistic.HAND_CONNECTIONS)
             if results.right_hand_landmarks:
-                self.mp_drawing.draw_landmarks(frame_bgr, results.right_hand_landmarks, self.mp_holistic.HAND_CONNECTIONS)
+                self.mp_drawing.draw_landmarks(frame_bgr, results.right_hand_landmarks,
+                                               self.mp_holistic.HAND_CONNECTIONS)
         if results.face_landmarks and "face" in self.extract:
             self.mp_drawing.draw_landmarks(frame_bgr, results.face_landmarks, self.mp_holistic.FACEMESH_TESSELATION)
 
@@ -129,7 +131,7 @@ class HolisticProcessor:
         if "pose" in self.extract:
             data.append(extract(results.pose_landmarks, self._landmark_counts['pose'], True))
         if "hand" in self.extract:
-            data.append(extract(results.left_hand_landmarks, self._landmark_counts['left_hand'],False ))
+            data.append(extract(results.left_hand_landmarks, self._landmark_counts['left_hand'], False))
             data.append(extract(results.right_hand_landmarks, self._landmark_counts['right_hand'], False))
         if "face" in self.extract:
             data.append(extract(results.face_landmarks, self._landmark_counts['face']))
@@ -163,7 +165,8 @@ class HolisticProcessor:
 
         frames_data = []
 
-        with tqdm(total=frame_count, desc=f"Processing <{video_id}> for gloss '{gloss}'", unit='frame', colour='white', leave=False) as pbar:
+        with tqdm(total=frame_count, desc=f"Processing <{video_id}> for gloss '{gloss}'", unit='frame', colour='white',
+                  leave=False) as pbar:
             while True:
                 success, frame = cap.read()
                 if not success:
@@ -199,25 +202,3 @@ class HolisticProcessor:
         else:
             df.insert(1, 'gloss', "nil")
         return df
-
-
-
-
-if __name__ == "__main__":
-    # TESTING...
-
-    # load wlasl videos folder path
-    load_dotenv()
-    videos_path = os.getenv("WLASL_VIDEOS_PATH")
-
-    # create video file path for example video 69241.mp4 that is an instance of 'book'
-    path=os.path.join(videos_path, f"{69241}.mp4")
-
-    # initiate processor
-    processor = HolisticProcessor(extract=["pose", "hand"])
-
-    # process video
-    result_df=processor.process_video(path, True, "book")
-
-    # print datafame
-    print(result_df)

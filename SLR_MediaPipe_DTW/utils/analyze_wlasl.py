@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.stats import norm
 
+
 def get_train_val_test_split_per_gloss(json_path, n_glosses, plot=False):
     with open(json_path, 'r') as f:
         all_glosses = json.load(f)
@@ -28,7 +29,6 @@ def get_train_val_test_split_per_gloss(json_path, n_glosses, plot=False):
         plot_stats(gloss_split_counts)
 
     return gloss_video_ids
-
 
 
 def plot_stats(gloss_split_counts):
@@ -87,7 +87,6 @@ if __name__ == '__main__':
     # TESTING...
     load_dotenv()
     metadata_path = os.getenv("WLASL_METADATA_PATH")
-
 
     if not metadata_path or not os.path.exists(metadata_path):
         print("❌ Invalid or missing wlasl_csv_exports path. Set WLASL_METADATA_PATH in your .env file.")

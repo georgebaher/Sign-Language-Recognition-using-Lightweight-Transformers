@@ -1,3 +1,5 @@
+import os
+
 import pandas as pd
 from Mediapipe_holistic.HolisticProcessor import HolisticProcessor
 
@@ -26,8 +28,8 @@ def compute_video_landmarks(video_path: str, gloss: str, show_landmarks: bool = 
         print(f"❌ Error processing video <{video_path}>: {e}")
         return pd.DataFrame()
 
+
 if __name__ == "__main__":
     # TESTING ...
-    vid_path=r"C:\Users\georg\PycharmProjects\Acht\WLASL\start_kit\videos\69302.mp4"
-    res_df=compute_video_landmarks(vid_path,"drink",True)
+    res_df = compute_video_landmarks(os.getenv('TEST_VIDEO_PATH'), "drink", True)
     print(res_df)

@@ -74,12 +74,12 @@ def summarize_single_video_pose_angles(video_pose_angles_df: pd.DataFrame) -> pd
 
 
 if __name__ == "__main__":
-    landmarks_df=pd.read_parquet(os.getenv("WLASL100_LANDMARKS_PATH"))
-    test_video_id="69302"
-    df=landmarks_df[landmarks_df["video_id"] == test_video_id]
+    landmarks_df = pd.read_parquet(os.getenv("WLASL100_HAND_POSE_LANDMARKS_PATH"))
+    test_video_id = "69302"
+    df = landmarks_df[landmarks_df["video_id"] == test_video_id]
     print(df)
-    # vid_pose_angles_df=compute_pose_angles(landmarks_df, test_video_id, "drink")
-    # print(vid_pose_angles_df)
-    # vid_pose_angles_summary = summarize_single_video_pose_angles(vid_pose_angles_df)
-    # print(vid_pose_angles_summary)
-    # print(f"Number of padded metrics with -2: {list(vid_pose_angles_summary.iloc[0].values).count(-2)}")
+    vid_pose_angles_df = compute_pose_angles(landmarks_df, test_video_id, "drink")
+    print(vid_pose_angles_df)
+    vid_pose_angles_summary = summarize_single_video_pose_angles(vid_pose_angles_df)
+    print(vid_pose_angles_summary)
+    print(f"Number of padded metrics with -2: {list(vid_pose_angles_summary.iloc[0].values).count(-2)}")

@@ -3,7 +3,7 @@ import os
 from dotenv import load_dotenv
 
 def get_features_by_option(video_id: str,
-                           landmarks_df: pd.DataFrame,
+                           hand_pose_landmarks_df: pd.DataFrame,
                            hand_angles_df: pd.DataFrame,
                            pose_angles_df: pd.DataFrame,
                            option: str) -> pd.DataFrame:
@@ -11,7 +11,7 @@ def get_features_by_option(video_id: str,
     Return the appropriate feature DataFrame based on video_id and feature option.
 
     :param video_id: str, the video ID to filter on
-    :param landmarks_df: DataFrame of hand + pose landmarks
+    :param hand_pose_landmarks_df: DataFrame of hand + pose landmarks
     :param hand_angles_df: DataFrame of hand angles
     :param pose_angles_df: DataFrame of pose angles
     :param option: One of ["hand_landmarks", "hand+pose_landmarks", "hand_angles", "hand+pose_angles"]
@@ -22,9 +22,8 @@ def get_features_by_option(video_id: str,
         raise ValueError(f"❌ Invalid option: {option}")
 
     # Filter each DataFrame by video_id
-    hand_pose_landmarks = landmarks_df[landmarks_df["video_id"] == video_id]
+    hand_pose_landmarks = hand_pose_landmarks_df[hand_pose_landmarks_df["video_id"] == video_id]
     hand_angles = hand_angles_df[hand_angles_df["video_id"] == video_id]
-    pose_angles = pose_angles_df[pose_angles_df["video_id"] == video_id]
 
     # Drop wlasl_csv_exports columns (video_id, gloss)
     def drop_meta(df):

@@ -4,7 +4,7 @@ import time
 import pandas as pd
 from dotenv import load_dotenv
 from tqdm import tqdm
-from Mediapipe_holistic.processing.hand_angles_utils import compute_hand_angles, get_hand_header
+from Mediapipe_holistic.processing.hand_angles_utils import compute_hand_angles
 from Mediapipe_holistic.processing.io_utils import load_existing_ids, save_and_merge
 
 # Start timer
@@ -13,13 +13,13 @@ start = time.time()
 # Load paths
 load_dotenv()
 metadata_path = os.getenv("WLASL_METADATA_PATH")
-landmarks_path = os.getenv("WLASL100_LANDMARKS_PATH")
+hands_landmarks_path = os.getenv("WLASL100_HAND_LANDMARKS_PATH")
 output_path = os.getenv("WLASL100_HAND_ANGLES_PATH")
 
 # Load wlasl_csv_exports + landmarks
 with open(metadata_path) as f:
     glosses = json.load(f)[:100]
-landmarks_df = pd.read_parquet(landmarks_path)
+hands_landmarks_df = pd.read_parquet(hands_landmarks_path)
 
 # Load already processed
 processed_ids, existing_df = load_existing_ids(output_path)
@@ -40,7 +40,7 @@ for gloss in tqdm(glosses, desc="Glosses", unit='glosss', colour='green'):
             continue
 
         try:
-            df = compute_hand_angles(landmarks_df, video_id, gloss_label)
+            df = compute_hand_angles(hands_landmarks_df, video_id, gloss_label)
             if df.empty:
                 print(f"⚠️ Skipping empty video_id: {video_id}")
                 continue

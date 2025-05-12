@@ -4,7 +4,7 @@ import time
 import pandas as pd
 from dotenv import load_dotenv
 from tqdm import tqdm
-from Mediapipe_holistic.processing.pose_angles_utils import compute_pose_angles, get_pose_header
+from Mediapipe_holistic.processing.pose_angles_utils import compute_pose_angles
 from Mediapipe_holistic.processing.io_utils import load_existing_ids, save_and_merge
 
 # Start timer
@@ -14,10 +14,10 @@ start = time.time()
 load_dotenv()
 metadata_path = os.getenv("WLASL_METADATA_PATH")
 project_root = os.path.dirname(os.path.dirname(__file__))  # Goes up 2 levels to project root
-landmarks_path = os.getenv("WLASL100_LANDMARKS_PATH")
+landmarks_path = os.getenv("WLASL100_HAND_POSE_LANDMARKS_PATH")
 output_path = os.getenv("WLASL100_POSE_ANGLES_PATH")
 
-# Load wlasl_csv_exports + landmarks
+# Load landmarks
 with open(metadata_path) as f:
     glosses = json.load(f)[:100]
 landmarks_df = pd.read_parquet(landmarks_path)

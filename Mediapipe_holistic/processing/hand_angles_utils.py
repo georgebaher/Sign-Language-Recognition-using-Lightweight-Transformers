@@ -2,15 +2,17 @@ import pandas as pd
 import numpy as np
 import os
 from dotenv import load_dotenv
+
 load_dotenv()
 
 from SLR_MediaPipe_DTW.models.hand_model import HandModel
+
 
 def compute_hand_angles(df: pd.DataFrame, video_id: str, gloss: str) -> pd.DataFrame:
     """
        Compute hand angles from pre-labeled landmark DataFrame.
 
-       :param df: DataFrame containing all videos' landmarks with columns like 'P#0_x, ..., LH#0_x', ..., 'RH#20_z'
+       :param df: DataFrame containing all videos hands landmarks with columns like 'video_id, gloss, LH#0_x', ..., 'RH#20_z'
        :param video_id: The ID of the video to process
        :param gloss: The associated gloss
        :return: DataFrame with angle vectors for each frame
@@ -35,6 +37,7 @@ def compute_hand_angles(df: pd.DataFrame, video_id: str, gloss: str) -> pd.DataF
 
     # Create DataFrame with header
     return pd.DataFrame(rows, columns=get_hand_header())
+
 
 def get_hand_header() -> list:
     dummy = HandModel([i for i in range(63)])
@@ -81,9 +84,10 @@ def summarize_single_video_hand_angles(video_hand_angles_df: pd.DataFrame) -> pd
 
 
 if __name__ == "__main__":
-    landmarks_df=pd.read_parquet(os.getenv("WLASL100_LANDMARKS_PATH"))
-    test_video_id="69302"
-    vid_hand_angles_df=compute_hand_angles(landmarks_df, test_video_id, "drink")
+    # TESTING ...
+    all_vids_hand_landmarks_df = pd.read_parquet(os.getenv("WLASL100_HAND_LANDMARKS_PATH"))
+    test_video_id = "69302"
+    vid_hand_angles_df = compute_hand_angles(all_vids_hand_landmarks_df, test_video_id, "drink")
     print(vid_hand_angles_df)
     vid_hand_angles_summary = summarize_single_video_hand_angles(vid_hand_angles_df)
     print(vid_hand_angles_summary)

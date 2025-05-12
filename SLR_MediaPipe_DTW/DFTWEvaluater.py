@@ -1,16 +1,18 @@
 import os
 import time
-import random
-from tqdm import tqdm
 import pandas as pd
+from tqdm import tqdm
 from typing import Literal
 from dotenv import load_dotenv
 from math import ceil
 from collections import Counter
-from SLR_MediaPipe_DTW.utils.get_features_by_option import get_features_by_option
 from SLR_MediaPipe_DTW.utils.dtw import dtw_distances
 from SLR_MediaPipe_DTW.utils.plt_eval_metrics import plot_dtw_evaluation_results
-from SLR_MediaPipe_DTW.misc.analyze_wlasl import get_train_val_test_split_per_gloss
+from SLR_MediaPipe_DTW.utils.analyze_wlasl import get_train_val_test_split_per_gloss
+
+
+def drop_meta(df):
+    return df.drop(columns=["video_id", "gloss"], errors="ignore")
 
 
 class DTWEvaluator:
@@ -24,15 +26,17 @@ class DTWEvaluator:
 
         # Load paths
         self.metadata_path = os.getenv("WLASL_METADATA_PATH")
-        self.landmarks_path = os.getenv("WLASL100_LANDMARKS_PATH")
+        self.hand_pose_landmarks_path = os.getenv("WLASL100_HAND_POSE_LANDMARKS_PATH")
+        self.hand_landmarks_path = os.getenv("WLASL100_HAND_LANDMARKS_PATH")
         self.hand_angles_path = os.getenv("WLASL100_HAND_ANGLES_PATH")
-        self.pose_angles_path = os.getenv("WLASL100_POSE_ANGLES_PATH")
+        self.hand_pose_angles_path = os.getenv("WLASL100_HAND_POSE_ANGLES_PATH")
 
         # Load data
         self._validate_paths()
-        self.landmarks_df = pd.read_parquet(self.landmarks_path)
+        self.hand_pose_landmarks_df = pd.read_parquet(self.hand_pose_landmarks_path)
+        self.hand_landmarks_df = pd.read_parquet(self.hand_landmarks_path)
         self.hand_angles_df = pd.read_parquet(self.hand_angles_path)
-        self.pose_angles_df = pd.read_parquet(self.pose_angles_path)
+        self.hand_pose_angles_df = pd.read_parquet(self.hand_pose_angles_path)
         self.gloss_video_ids = get_train_val_test_split_per_gloss(self.metadata_path, self.n_glosses)
 
         self.total_correct = 0
@@ -43,21 +47,24 @@ class DTWEvaluator:
 
     def _validate_paths(self):
         for path in [
-            self.metadata_path, self.landmarks_path,
-            self.hand_angles_path, self.pose_angles_path
+            self.metadata_path, self.hand_pose_landmarks_path,
+            self.hand_angles_path, self.hand_pose_angles_path
         ]:
             if not os.path.exists(path):
                 raise FileNotFoundError(f"❌ Missing required file: {path}")
 
     def get_flat_embedding(self, video_id: str) -> list[list[float]]:
-        df = get_features_by_option(
-            video_id,
-            self.landmarks_df,
-            self.hand_angles_df,
-            self.pose_angles_df,
-            self.feature_option
-        )
-        return df.values.tolist() if not df.empty else None
+        df = pd.DataFrame()
+        if self.feature_option == "hand_landmarks":
+            df = self.hand_landmarks_df[self.hand_landmarks_df["video_id"] == video_id].drop(columns=["video_id", "gloss"], errors="ignore")
+        elif self.feature_option == "hand+pose_landmarks":
+            df = self.hand_pose_landmarks_df[self.hand_pose_landmarks_df["video_id"] == video_id].drop(
+                columns=["video_id", "gloss"], errors="ignore")
+        elif self.feature_option == "hand_angles":
+            df = self.hand_angles_df[self.hand_angles_df["video_id"] == video_id].drop(columns=["video_id", "gloss"], errors="ignore")
+        elif self.feature_option == "hand+pose_angles":
+            df = self.hand_pose_angles_df[self.hand_pose_angles_df["video_id"] == video_id].drop(columns=["video_id", "gloss"], errors="ignore")
+        return df.values.tolist()
 
     def evaluate(self):
         reference_entries = []
@@ -82,10 +89,6 @@ class DTWEvaluator:
             test_embeddings = [
                 (vid, self.get_flat_embedding(vid)) for vid in test_ids
             ]
-            test_embeddings = [(vid, e) for vid, e in test_embeddings if e is not None]
-
-            if not test_embeddings:
-                continue
 
             for test_vid, test_embedding in test_embeddings:
                 start = time.time()
@@ -120,39 +123,37 @@ class DTWEvaluator:
 
         self.accuracy = self.total_correct / self.total_tests * 100
         self.avg_time = self.total_time / self.total_tests
-
-        print(f"\n📊 Accuracy: {self.accuracy:.2f}% over {self.total_tests} tests")
-        print(f"⏱️  Avg DTW time/test: {self.avg_time:.4f} seconds")
+        print(f"📊 Accuracy over {self.total_tests} tests: {self.accuracy:.2f}%")
+        print(f"⏱️  Avg DTW time/test: {self.avg_time:.4f} seconds\n")
 
 
 if __name__ == "__main__":
-    # results = []
-    #
-    # n_list = [1, 2, 3, 4, 5, 10, 15, 20, 25, 30]
-    # feature_options = ["hand_landmarks", "hand+pose_landmarks", "hand_angles", "hand+pose_angles"]
-    #
-    # for feature_option in feature_options:
-    #     for n in tqdm(n_list, desc=f"Evaluating {feature_option}", leave=False):
-    #         print(f"\n🔄 Running DTW Evaluation | Features: {feature_option} | Glosses: {n}")
-    #         evaluator = DTWEvaluator(feature_option=feature_option, n_glosses=n)
-    #         evaluator.evaluate()
-    #
-    #         # Store results
-    #         results.append({
-    #             "n_glosses": n,
-    #             "feature_option": feature_option,
-    #             "accuracy": round(evaluator.accuracy, 2),
-    #             "avg_dtw_time_sec": round(evaluator.avg_time, 4),
-    #             "num_tests": evaluator.total_tests
-    #         })
-    #
-    # # Display results
-    # results_df = pd.DataFrame(results)
-    # print("/n📋 Summary of All Runs:")
-    # print(results_df.to_string(index=False))
-    # results_df.to_parquet("dtw_evaluation_results_after_adjusting_angles.parquet", index=False)
+    results = []
+
+    n_list = [1, 2, 3, 4, 5, 10, 15, 20, 25, 30]
+    feature_options = ["hand_landmarks", "hand+pose_landmarks", "hand_angles", "hand+pose_angles"]
+
+    for feature_option in feature_options:
+        for n in tqdm(n_list, desc=f"Evaluating {feature_option}", leave=False):
+            print(f"\n🔄 Running DTW Evaluation | Features: {feature_option} | Glosses: {n}")
+            evaluator = DTWEvaluator(feature_option = feature_option, n_glosses=n)
+            evaluator.evaluate()
+
+            # Store results
+            results.append({
+                "n_glosses": n,
+                "feature_option": feature_option,
+                "accuracy": round(evaluator.accuracy, 2),
+                "avg_dtw_time_sec": round(evaluator.avg_time, 4),
+                "num_tests": evaluator.total_tests
+            })
+
+    # Display results
+    results_df = pd.DataFrame(results)
+    plot_dtw_evaluation_results(results_df)
+    print("\n📋 Summary of All Runs:")
+    print(results_df.to_string(index=False))
+    results_df.to_parquet("dtw_evaluation_results.parquet", index=False)
 
 
-    x = pd.read_parquet("C:/Users/georg/PycharmProjects/Acht/SLR_MediaPipe_DTW/dtw_evaluation_results_after_adjusting_angles.parquet")
-    plot_dtw_evaluation_results(x)
 

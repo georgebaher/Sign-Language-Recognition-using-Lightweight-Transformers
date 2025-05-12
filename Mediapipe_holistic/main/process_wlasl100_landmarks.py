@@ -47,7 +47,7 @@ for gloss in tqdm(glosses, desc="Glosses", unit="gloss", colour='green'):
             missing_videos.append(video_id)
             continue
 
-        df = compute_video_landmarks(video_path, gloss_label) # hands and pose only
+        df = compute_video_landmarks(video_path, gloss_label)  # hands and pose only
         if df.empty:
             failed_videos.append(video_id)
             continue
