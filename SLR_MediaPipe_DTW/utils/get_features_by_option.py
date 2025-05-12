@@ -57,7 +57,7 @@ def get_features_by_option(video_id: str,
     return pd.DataFrame()  # fallback (should never hit)
 
 if __name__ == "__main__":
-    # testing ...
+    # TESTING ...
     load_dotenv()
     landmarks_df = pd.read_parquet(os.getenv("WLASL100_LANDMARKS_PATH"))
     hand_angles_df=pd.read_parquet(os.getenv("WLASL100_HAND_ANGLES_PATH"))

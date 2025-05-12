@@ -56,15 +56,15 @@ class HolisticProcessor:
         columns = []
         if "pose" in self.extract:
             for i in range(self._landmark_counts['pose']):
-                columns.extend([f'P#{i}_x', f'P#{i}_y', f'P#{i}_z', f'P#{i}_vis'])
+                columns.extend([f'P#{i}_x', f'P#{i}_y', f'P#{i}_z'])
         if "hand" in self.extract:
             for i in range(self._landmark_counts['left_hand']):
-                columns.extend([f'LH#{i}_x', f'LH#{i}_y', f'LH#{i}_z', f'LH#{i}_vis'])
+                columns.extend([f'LH#{i}_x', f'LH#{i}_y', f'LH#{i}_z'])
             for i in range(self._landmark_counts['right_hand']):
-                columns.extend([f'RH#{i}_x', f'RH#{i}_y', f'RH#{i}_z', f'RH#{i}_vis'])
+                columns.extend([f'RH#{i}_x', f'RH#{i}_y', f'RH#{i}_z'])
         if "face" in self.extract:
             for i in range(self._landmark_counts['face']):
-                columns.extend([f'F#{i}_x', f'F#{i}_y', f'F#{i}_z', f'F#{i}_vis'])
+                columns.extend([f'F#{i}_x', f'F#{i}_y', f'F#{i}_z'])
         return columns
 
     def _draw_landmarks(self, window_name, frame_rgb, results):
@@ -105,17 +105,32 @@ class HolisticProcessor:
         Returns:
         - np.ndarray: Flattened landmark data for one frame.
         """
-        def extract(landmarks, count):
+
+        def extract(landmarks, count, use_visibility=False, vis_threshold=0.5):
             if not landmarks:
-                return np.full((count, 4), pad_val)
-            return np.array([[lm.x, lm.y, lm.z, lm.visibility] for lm in landmarks.landmark])
+                return np.full((count, 3), pad_val)
+
+            result = []
+            for lm in landmarks.landmark:
+                if use_visibility:
+                    # Only used for pose landmarks
+                    vis = getattr(lm, "visibility", None)
+                    if vis is not None and vis < vis_threshold:
+                        result.append([pad_val] * 3)
+                    else:
+                        result.append([lm.x, lm.y, lm.z])
+                else:
+                    # For hands/face: visibility is meaningless → just return xyz
+                    result.append([lm.x, lm.y, lm.z])
+
+            return np.array(result)
 
         data = []
         if "pose" in self.extract:
-            data.append(extract(results.pose_landmarks, self._landmark_counts['pose']))
+            data.append(extract(results.pose_landmarks, self._landmark_counts['pose'], True))
         if "hand" in self.extract:
-            data.append(extract(results.left_hand_landmarks, self._landmark_counts['left_hand']))
-            data.append(extract(results.right_hand_landmarks, self._landmark_counts['right_hand']))
+            data.append(extract(results.left_hand_landmarks, self._landmark_counts['left_hand'],False ))
+            data.append(extract(results.right_hand_landmarks, self._landmark_counts['right_hand'], False))
         if "face" in self.extract:
             data.append(extract(results.face_landmarks, self._landmark_counts['face']))
         return np.concatenate(data) if data else np.array([])
@@ -176,24 +191,33 @@ class HolisticProcessor:
             return pd.DataFrame()
 
         column_names = self._generate_column_names()
-        df= pd.DataFrame(frames_data, columns=column_names)
-        df['video_id'] = video_id.split(".")[0]
+        df = pd.DataFrame(frames_data, columns=column_names)
+        vid_id_clean = video_id.split(".")[0]
+        df.insert(0, 'video_id', vid_id_clean)
         if gloss:
-            df['gloss'] = gloss
+            df.insert(1, 'gloss', gloss)
+        else:
+            df.insert(1, 'gloss', "nil")
         return df
 
 
 
 
 if __name__ == "__main__":
-    #load videos_path
+    # TESTING...
+
+    # load wlasl videos folder path
     load_dotenv()
     videos_path = os.getenv("WLASL_VIDEOS_PATH")
-    #create video file path
+
+    # create video file path for example video 69241.mp4 that is an instance of 'book'
     path=os.path.join(videos_path, f"{69241}.mp4")
-    #initiate processor
+
+    # initiate processor
     processor = HolisticProcessor(extract=["pose", "hand"])
-    #process video
+
+    # process video
     result_df=processor.process_video(path, True, "book")
-    #print datafame
+
+    # print datafame
     print(result_df)

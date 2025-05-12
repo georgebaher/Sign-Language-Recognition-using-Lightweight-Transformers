@@ -13,10 +13,10 @@ start = time.time()
 # Load environment
 load_dotenv()
 metadata_path = os.getenv("WLASL_METADATA_PATH")
-videos_path = os.getenv("WLASL_VIDEOS_PATH")
+videos_folder_path = os.getenv("WLASL_VIDEOS_PATH")
 
 # data output path
-landmark_parquet_path = os.getenv("WLASL100_LANDMARKS_PATH")
+landmark_parquet_path = os.getenv("WLASL100_HAND_POSE_LANDMARKS_PATH")
 
 # Load wlasl_csv_exports
 with open(metadata_path, 'r') as f:
@@ -35,19 +35,19 @@ failed_videos = []
 # Loop over glosses
 for gloss in tqdm(glosses, desc="Glosses", unit="gloss", colour='green'):
     gloss_label = gloss["gloss"]
-    for instance in tqdm(gloss["instances"], desc=f"<{gloss_label}>", unit="video", leave=False, colour='white'):
+    for instance in tqdm(gloss["instances"], desc=f"<{gloss_label}>", unit="video", leave=False, colour='cyan'):
         video_id = instance["video_id"]
 
         if video_id in processed_ids:
             continue
 
-        video_path = os.path.join(videos_path, f"{video_id}.mp4")
+        video_path = os.path.join(videos_folder_path, f"{video_id}.mp4")
         if not os.path.isfile(video_path):
             print(f"⚠️ File not found: {video_path}")
             missing_videos.append(video_id)
             continue
 
-        df = compute_video_landmarks(video_path, gloss_label, video_id)
+        df = compute_video_landmarks(video_path, gloss_label) # hands and pose only
         if df.empty:
             failed_videos.append(video_id)
             continue

@@ -1,7 +1,7 @@
 import pandas as pd
 
 # Load base landmark + angle files
-df_landmarks = pd.read_parquet('parquet/wlasl100_landmarks.parquet')
+df_landmarks = pd.read_parquet('parquet/wlasl100_hand_pose_landmarks.parquet')
 df_hand_angles = pd.read_parquet('parquet/wlasl100_hand_angles.parquet')
 df_pose_angles = pd.read_parquet('parquet/wlasl100_pose_angles.parquet')
 

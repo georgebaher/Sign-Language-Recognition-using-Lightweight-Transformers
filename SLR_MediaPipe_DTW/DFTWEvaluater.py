@@ -148,11 +148,11 @@ if __name__ == "__main__":
     #
     # # Display results
     # results_df = pd.DataFrame(results)
-    # print("\n📋 Summary of All Runs:")
+    # print("/n📋 Summary of All Runs:")
     # print(results_df.to_string(index=False))
     # results_df.to_parquet("dtw_evaluation_results_after_adjusting_angles.parquet", index=False)
 
 
-    x = pd.read_parquet("C:/Users/boulosge/Desktop/Acht/SLR_MediaPipe_DTW/dtw_evaluation_results_after_adjusting_angles.parquet")
+    x = pd.read_parquet("C:/Users/georg/PycharmProjects/Acht/SLR_MediaPipe_DTW/dtw_evaluation_results_after_adjusting_angles.parquet")
     plot_dtw_evaluation_results(x)
 

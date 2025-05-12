@@ -36,7 +36,7 @@ class PoseModel(object):
         vectors = []
         for a, b in self.connections:
             if np.any(landmarks[a] == -2) or np.any(landmarks[b] == -2):
-                #print(f"Skipping connection ({a}, {b}) due to missing landmark")
+                print(f"Skipping connection ({a}, {b}) due to missing landmark")
                 vectors.append(np.array([-2, -2, -2]))
             else:
                 vectors.append(landmarks[b] - landmarks[a])

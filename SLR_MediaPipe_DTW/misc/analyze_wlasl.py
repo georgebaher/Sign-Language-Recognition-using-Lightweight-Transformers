@@ -84,6 +84,7 @@ def plot_stats(gloss_split_counts):
 
 
 if __name__ == '__main__':
+    # TESTING...
     load_dotenv()
     metadata_path = os.getenv("WLASL_METADATA_PATH")
 
