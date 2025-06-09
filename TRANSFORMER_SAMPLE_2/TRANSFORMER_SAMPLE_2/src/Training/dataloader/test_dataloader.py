@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 
 
 # ------------------ PLOT FUNCTION ------------------
-def plot_landmarks(feature_tensor: torch.Tensor, save_path="tmp/output.mp4", width=512, height=512, fps=25):
+def plot_landmarks(feature_tensor: torch.Tensor, save_path="tmp/output.mp4", width=512, height=512, fps=25, axis_mode='xyz'):
     """
     Render landmarks on a white background and save as video.
     Skips padded frames (-2) and padded landmarks (-2).
@@ -40,11 +40,19 @@ def plot_landmarks(feature_tensor: torch.Tensor, save_path="tmp/output.mp4", wid
     ###### Prepare landmarks ######
     seq_len, feature_dim = feature_tensor.shape
 
+    n_axis=3
+    if axis_mode == 'xyz':
+        pass
+    elif axis_mode == 'xy':
+        n_axis=2
+    else:
+        raise ValueError(f'[ERROR] Axis mode {axis_mode} not supported')
+
     # This condition is for checking if there was an extra padding column added in get_item() in dataloader to relax the positional encoding 'even d_model' requirement
-    if feature_dim % 3 != 0:
+    if feature_dim % n_axis != 0:
         feature_tensor = feature_tensor[:, :-1]
 
-    features_np = feature_tensor.cpu().numpy().reshape(seq_len, -1, 3)
+    features_np = feature_tensor.cpu().numpy().reshape(seq_len, -1, n_axis)
 
     def draw_subset(frame, coords, connections, prefix="", color_points=(0, 0, 255), color_lines=(0, 255, 0),
                     plot_labels=False):
@@ -76,7 +84,7 @@ def plot_landmarks(feature_tensor: torch.Tensor, save_path="tmp/output.mp4", wid
         if np.allclose(frame_data, -2):  # skip fully padded frame
             continue
 
-        frame = np.zeros((height, width, 3), dtype=np.uint8) * 255  # white background
+        frame = np.zeros((height, width, 3), dtype=np.uint8) * 255  # black background
 
         pose = frame_data[:33]
         left_hand = frame_data[33:54]
@@ -111,7 +119,7 @@ def main():
         parquet_path=parquet_path,
         metadata_json_path=metadata_path,
         split="train",
-        #max_len=195,  # adjust as needed
+        axis_mode='xy'
     )
     print(f"[INFO] Loaded dataset with {len(dataset)} samples and {len(dataset.gloss2idx)} classes")
 
@@ -127,7 +135,7 @@ def main():
 
         # Visualize the first sample from first batch
         for idx, feature_tensor in enumerate(features[:3]):
-            plot_landmarks(feature_tensor, f'tmp/{decoded_labels[idx][1]}_batch_{i}_idx_{idx}.mp4')
+            plot_landmarks(feature_tensor, f'tmp/{decoded_labels[idx][1]}_batch_{i}_idx_{idx}.mp4', axis_mode='xy')
 
         if i == 1:
             break

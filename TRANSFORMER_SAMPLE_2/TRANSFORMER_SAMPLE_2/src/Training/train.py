@@ -11,6 +11,8 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
+from dotenv import load_dotenv
+load_dotenv()
 
 sys.path.append('.')
 sys.path.append('..')
@@ -25,19 +27,19 @@ from src.Training.models.BaselineTransformerClassification import BaselineTransf
 def get_default_args():
     parser = argparse.ArgumentParser(add_help=False)
 
-    parser.add_argument("--hidden_dim", type=int, default=225,
-                        # That is (21+21+33)<hands+pose landmarks counts> * 3<xzy>
+    parser.add_argument("--hidden_dim", type=int, default=150,
                         help="Hidden dimension of the underlying Transformer model")
     parser.add_argument("--n_heads", type=int, default=9,
                         help="Hidden dimension of the underlying Transformer model")
     parser.add_argument("--seed", type=int, default=379,
                         help="Seed with which to initialize all the random components of the training")
     parser.add_argument("--clip_weights", type=int, default=0, help="Clip weights during training")
+    parser.add_argument("--clip_gradients", type=int, default=0, help="Clip gradients during training")
     parser.add_argument("--model2use", type=str,
                         choices=["baselineTransformer"],
                         default="baselineTransformer",
                         help='Type of model to select for the training. choices=["baselineTransformer"]')
-    parser.add_argument("--pe", type=str, default='True',
+    parser.add_argument("--pe", type=int, default=1,
                         help="Determines whether positional encoding is used or not")
     parser.add_argument("--optimizer", type=str,
                         choices=["SGD", "adam", "adamW"],
@@ -47,9 +49,12 @@ def get_default_args():
                         choices=["WLASL100", "AVASAG100"],
                         default="WLASL100",
                         help='Dataset used. choices=["WLASL100", "AVASAG100"]')
-    parser.add_argument("--features_name", type=str,
-                        default="XYZ LANDMARKS",
+    parser.add_argument("--features", type=str,
+                        default="XYZ",
                         help='features used')
+    parser.add_argument("--num_classes", type=int,
+                        default=100,
+                        help='number of classes recognized')
 
     # Landmarks library
     parser.add_argument("--mediapipe_holistic", type=str, default='True',
@@ -71,7 +76,7 @@ def get_default_args():
                         help="Determines whether to save weights checkpoints")
 
     # # TODO: Gaussian noise normalization (Not yet)
-    # parser.add_argument("--transform", type=int, default=0, help="Apply gaussian noise transformation")
+    parser.add_argument("--transform", type=int, default=0, help="Apply gaussian noise transformation")
     # parser.add_argument("--gaussian_mean", type=int, default=0, help="Mean parameter for Gaussian noise layer")
     # parser.add_argument("--gaussian_std", type=int, default=0.001,
     #                     help="Standard deviation parameter for Gaussian noise layer")
@@ -109,6 +114,7 @@ def train(args):
     fix_randomisation()
     # set device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f'[INFO] running using {device} on <{torch.cuda.get_device_name(0)}>')
     #_____________________________________________________________________#
 
     ##########  PARAMETERS ############
@@ -120,18 +126,21 @@ def train(args):
     hidden_dim = args.hidden_dim
     model2use = args.model2use
     batch_size = args.batch_size
+    num_classes = args.num_classes
     optimizer_name = args.optimizer
     clip_weights = args.clip_weights
+    clip_gradients = args.clip_gradients
     transform = args.transform  # (Not yet)
-    features_name = args.features_name
+    features = args.features
     pe = args.pe
     epochs = args.epochs
     lr = args.lr
     log_freq = args.log_freq
     save_checkpoints = args.save_checkpoints
-    experiment_name = "__".join([
+    experiment_name = ", ".join([
         f"dataset={dataset_name}",
-        f"features={features_name}",
+        f"features={features}",
+        f"num_classes={num_classes}",
         f"model={model2use}",
         f"mediapipe_holistic={True if mediapipe_holistic else False}",
         f"dim={hidden_dim}",
@@ -150,11 +159,15 @@ def train(args):
     print(f">>>> Experiment name:\n {experiment_name} <<<<")
 
     # Set the output format to print into the console and save into LOG file
+    log_dir = "out-logs"  # or "out-logs", "results/logs", etc.
+    os.makedirs(log_dir, exist_ok=True)  # Create the directory if it doesn't exist
+    log_path = os.path.join(log_dir, f"{experiment_name}.log")
+
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(message)s",
         handlers=[
-            logging.FileHandler(f"{experiment_name}.log")
+            logging.FileHandler(log_path)
         ]
     )
     # _____________________________________________________________________#
@@ -163,18 +176,17 @@ def train(args):
     # Construct the model
     # FOR NOW, ONLY ONE MODEL VARIATION
 
-    model = BaselineTransformerClassification(num_classes=args.num_classes, hidden_dim=hidden_dim,
-                                              n_heads=n_heads)
+    model = BaselineTransformerClassification(num_classes=num_classes, hidden_dim=hidden_dim,
+                                              n_heads=n_heads, w_pe=pe)
     model.train(True)
     model.to(device)  # moves model to cpu or gpu if available
 
-    print(f"Used GPU memory: {torch.cuda.memory_allocated() / 1024 / 1024} MB")
+    print(f"[INFO] using GPU memory: {torch.cuda.memory_allocated() / 1024 / 1024} MB")
 
     loss_fn = nn.CrossEntropyLoss()
 
-    if optimizer_name == "SGD":
-        optimizer = optim.SGD(model.parameters(), lr=lr)
-    elif optimizer_name == "adam":
+    optimizer = "SGD"
+    if optimizer_name == "adam":
         optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     elif optimizer_name == "adamW":
         optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
@@ -184,6 +196,7 @@ def train(args):
     Path("out-img/").mkdir(parents=True, exist_ok=True)
 
     ############### DATA LOADERS #####################
+    train_set = val_set = test_set = None
     if dataset_name == "WLASL100":
         print("Processing WLASL100...")
         # Training set
@@ -191,22 +204,28 @@ def train(args):
                                         metadata_json_path=os.getenv('WLASL_METADATA_PATH'),
                                         split='train',
                                         transform=transform,
-                                        max_len=195,
+                                        axis_mode=features
                                         )
+        print(f"[INFO] Loaded train dataset with {len(train_set)} samples, {len(train_set.gloss2idx)} classes and shape {train_set.__getitem__(0)[0].shape}")
         # Validation set
         val_set = WLASLParquetDataset(parquet_path=os.getenv('WLASL100_HAND_POSE_LANDMARKS_PATH'),
                                       metadata_json_path=os.getenv('WLASL_METADATA_PATH'),
                                       split='val',
                                       transform=transform,
-                                      max_len=195,
+                                      axis_mode=features
                                       )
+        print(
+            f"[INFO] Loaded val dataset with {len(val_set)} samples, {len(val_set.gloss2idx)} classes and shape {val_set.__getitem__(0)[0].shape}")
         # Test
         test_set = WLASLParquetDataset(parquet_path=os.getenv('WLASL100_HAND_POSE_LANDMARKS_PATH'),
                                        metadata_json_path=os.getenv('WLASL_METADATA_PATH'),
                                        split='test',
                                        transform=transform,
-                                       max_len=195,
+                                       axis_mode=features
                                        )
+        print(
+            f"[INFO] Loaded test dataset with {len(test_set)} samples, {len(test_set.gloss2idx)} classes and shape {test_set.__getitem__(0)[0].shape}")
+
     elif dataset_name == "AVASAG":
         print("Processing AVASAG...")
         # TODO: load AVASAG100 dataset (Not yet)
@@ -216,55 +235,55 @@ def train(args):
     test_loader = DataLoader(test_set, shuffle=False, batch_size=1)
 
     ####################### TRAINING / VALIDATION #####################
-    train_acc, val_acc = 0, 0
+    average_train_acc, average_val_acc = 0, 0
     losses, train_accs, val_accs = [], [], []
     lr_progress = []
     top_train_acc, top_val_acc = 0, 0
     checkpoint_index = 0
 
-    print("Starting " + experiment_name + "...\n\n")
+    print("[INFO] Starting {" + experiment_name + "}...\n\n")
     logging.info("Starting " + experiment_name + "...\n\n")
 
     start = time.time()
 
     for epoch in range(args.epochs):
-        train_loss, _, _, train_acc = train_epoch_batch(model, train_loader, loss_fn, optimizer, device,
-                                                        batch_size=batch_size, clip_weights=clip_weights)
-        losses.append(train_loss / len(train_loader))
-        train_accs.append(train_acc)
+        average_train_loss, average_train_acc = train_epoch_batch(model, train_loader, loss_fn, optimizer, device,
+                                                                  batch_size=batch_size, clip_gradients=clip_gradients, clip_weights=clip_weights)
+        losses.append(average_train_loss)
+        train_accs.append(average_train_acc)
 
         if val_loader:
             model.train(False)
-            _, _, val_acc, _ = evaluate_batch(model, val_loader, device)  #num_classes=args.num_classes
+            average_val_acc, _ = evaluate_batch(model, val_loader, device)
             model.train(True)
-            val_accs.append(val_acc)
+            val_accs.append(average_val_acc)
 
         # Save checkpoints if they are best in the current subset
         if args.save_checkpoints:
-            if train_acc > top_train_acc:
-                top_train_acc = train_acc
+            if average_train_acc > top_train_acc:
+                top_train_acc = average_train_acc
                 print("... Saving checkpoint: out-checkpoints/" + experiment_name + "/checkpoint_v_" + str(
                     checkpoint_index) + ".pth")
                 torch.save(model,
                            "out-checkpoints/" + experiment_name + "/checkpoint_t_" + str(checkpoint_index) + ".pth")
 
-            if val_acc > top_val_acc:
-                top_val_acc = val_acc
+            if average_val_acc > top_val_acc:
+                top_val_acc = average_val_acc
                 print("... Saving checkpoint: out-checkpoints/" + experiment_name + "/checkpoint_v_" + str(
                     checkpoint_index) + ".pth")
                 torch.save(model,
                            "out-checkpoints/" + experiment_name + "/checkpoint_v_" + str(checkpoint_index) + ".pth")
 
         if epoch % args.log_freq == 0:
-            print("[" + str(epoch + 1) + "] TRAIN  loss: " + str(train_loss / len(train_loader)) + " acc: " + str(
-                train_acc))
+            print("[" + str(epoch + 1) + "] TRAIN  loss: " + str(average_train_loss) + " acc: " + str(
+                average_train_acc))
             logging.info(
-                "[" + str(epoch + 1) + "] TRAIN  loss: " + str(train_loss / len(train_loader)) + " acc: " + str(
-                    train_acc))
+                "[" + str(epoch + 1) + "] TRAIN  loss: " + str(average_train_loss) + " acc: " + str(
+                    average_train_acc))
 
             if val_loader:
-                print("[" + str(epoch + 1) + "] VALIDATION  acc: " + str(val_acc))
-                logging.info("[" + str(epoch + 1) + "] VALIDATION  acc: " + str(val_acc))
+                print("[" + str(epoch + 1) + "] VALIDATION  acc: " + str(average_val_acc))
+                logging.info("[" + str(epoch + 1) + "] VALIDATION  acc: " + str(average_val_acc))
 
             print("")
             logging.info("")
@@ -277,7 +296,7 @@ def train(args):
         lr_progress.append(optimizer.param_groups[0]["lr"])
 
     ####################### TESTING #####################
-    print("\nTesting checkpointed models starting...\n")
+    print("\n>>>>>Testing checkpointed models starting...\n")
     logging.info("\nTesting checkpointed models starting...\n")
     top_result, top_result_name = 0, ""
 
@@ -289,7 +308,7 @@ def train(args):
                     "out-checkpoints/" + experiment_name + "/checkpoint_" + checkpoint_id + "_" + str(i) + ".pth")
                 tested_model.eval()
                 tested_model.train(False)
-                _, _, eval_acc, _ = evaluate_batch(tested_model, test_loader, device, print_stats=True)
+                eval_acc, _ = evaluate_batch(tested_model, test_loader, device, print_stats=True)
 
                 if eval_acc > top_result:
                     top_result = eval_acc
@@ -305,12 +324,12 @@ def train(args):
         logging.info("\nThe top result was recorded at " + str(
             top_result) + " testing accuracy. The best checkpoint is " + top_result_name + ".")
         logging.info("\n ----------------Config information----------------------- \n")
-        logging.info("- Features:" + str(features_name) + "\n")
+        logging.info("- Features:" + str(features) + "\n")
         logging.info("- Model:" + str(model2use) + "\n")
         logging.info("- Batch size:" + str(batch_size) + "\n")
         logging.info("- Opt: " + str(optimizer) + "\n")
         # logging.info("- Max. Len:" + str(max_len_videos) + "\n")
-        logging.info("- N landm.:" + str(n_features) + "\n")
+        logging.info("- N landm.:" + str(hidden_dim) + "\n")
         logging.info("- N heads:" + str(n_heads) + "\n")
         logging.info("- Transform (data Augm.):" + str(transform) + "\n")
         logging.info(" - Elapsed Time training (seconds): " + str(elapsed_time) + "\n")

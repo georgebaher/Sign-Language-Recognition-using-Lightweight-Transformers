@@ -6,11 +6,16 @@ import numpy as np
 
 
 class WLASLParquetDataset(Dataset):
-    def __init__(self, parquet_path, metadata_json_path, split="train", transform=None, max_len=None):
+    def __init__(self, parquet_path, metadata_json_path, split="train", transform=None, max_len=None, axis_mode='xyz'):
+        if parquet_path is None:
+            raise ValueError("parquet_path cannot be None")
+        if metadata_json_path is None:
+            raise ValueError("metadata_json_path cannot be None")
         self.df = pd.read_parquet(parquet_path)  # landmarks or angles
         self.transform = transform
         self.split = split
         self.max_len = max_len  # depends on features chosen
+        self.axis_mode = axis_mode.lower()  # Select axis to take
 
         # Load metadata and filter by split
         with open(metadata_json_path, "r") as f:
@@ -72,11 +77,20 @@ class WLASLParquetDataset(Dataset):
         group = self.feature_map.get_group(video_id)
         # print(group)
 
-        # Drop non-feature columns
-        features = group.drop(columns=["gloss", "video_id"], errors="ignore").values.astype(np.float32)
+        features_df = group.drop(columns=["gloss", "video_id"], errors="ignore")
 
-        # Convert to tensor
+        # Filter columns by axis_mode
+        if self.axis_mode == "xy":
+            features_df = features_df[[col for col in features_df.columns if not col.endswith('_z')]]
+        elif self.axis_mode == "xyz":
+            pass  # keep all
+        else:
+            raise ValueError(f"[ERROR] Invalid axis_mode: {self.axis_mode}")
+
+        # Now convert to NumPy
+        features = features_df.values.astype(np.float32)
         feature_tensor = torch.tensor(features)  # shape: (n_frames, n_features)
+
         # print(f'shape of feature tensor: {feature_tensor.shape}')
 
         # TODO: Optional transform
@@ -85,7 +99,7 @@ class WLASLParquetDataset(Dataset):
 
         # Pad feature dimension to even number if it's odd (for Positional Encoding)
         if feature_tensor.shape[1] % 2 != 0:
-            pad_column = torch.full((feature_tensor.shape[0], 1), fill_value=-2.0)
+            pad_column = torch.full((feature_tensor.shape[0], 3), fill_value=-2.0)
             feature_tensor = torch.cat([feature_tensor, pad_column], dim=1)
 
         # Pad to max_len

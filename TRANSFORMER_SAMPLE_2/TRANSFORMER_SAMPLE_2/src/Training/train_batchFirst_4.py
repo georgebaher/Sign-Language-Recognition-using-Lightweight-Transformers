@@ -257,7 +257,7 @@ def train(args):
     start = time.time()
 
     for epoch in range(args.epochs):
-        train_loss, _, _, train_acc = train_epoch_batch(slrt_model, train_loader, cel_criterion, optimizer, device, batch_size=batch_size, clip_weights=clipWeights)
+        train_loss, _, _, train_acc = train_epoch_batch(slrt_model, train_loader, cel_criterion, optimizer, device, batch_size=batch_size, clip_gradients=clipWeights)
         losses.append(train_loss / len(train_loader))
         train_accs.append(train_acc)
 
