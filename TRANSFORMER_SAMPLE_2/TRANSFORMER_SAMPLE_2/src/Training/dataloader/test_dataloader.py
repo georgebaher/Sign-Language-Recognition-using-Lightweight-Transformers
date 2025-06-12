@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 
 
 # ------------------ PLOT FUNCTION ------------------
-def plot_landmarks(feature_tensor: torch.Tensor, save_path="tmp/output.mp4", width=512, height=512, fps=25, axis_mode='xyz'):
+def plot_landmarks(feature_tensor: torch.Tensor, save_path="tmp/output.mp4", width=512, height=512, fps=25, axis_mode='xyz', drop_lower_body=0):
     """
     Render landmarks on a white background and save as video.
     Skips padded frames (-2) and padded landmarks (-2).
@@ -70,6 +70,8 @@ def plot_landmarks(feature_tensor: torch.Tensor, save_path="tmp/output.mp4", wid
             cv2.putText(frame, label, (cx + 4, cy - 4), font, font_scale, (255, 0, 255), thickness, cv2.LINE_AA)
 
         for start_idx, end_idx in connections:
+            if start_idx >= coords.shape[0] or end_idx >= coords.shape[0]:
+                continue
             pt1 = coords[start_idx]
             pt2 = coords[end_idx]
             if np.allclose(pt1, -2) or np.allclose(pt2, -2):
@@ -86,9 +88,14 @@ def plot_landmarks(feature_tensor: torch.Tensor, save_path="tmp/output.mp4", wid
 
         frame = np.zeros((height, width, 3), dtype=np.uint8) * 255  # black background
 
-        pose = frame_data[:33]
-        left_hand = frame_data[33:54]
-        right_hand = frame_data[54:]
+        if not drop_lower_body:
+            pose = frame_data[:33]
+            left_hand = frame_data[33:54]
+            right_hand = frame_data[54:]
+        else:
+            pose = frame_data[:23]
+            left_hand = frame_data[23:44]
+            right_hand = frame_data[44:]
 
         draw_subset(frame, left_hand, HAND_CONNECTIONS, prefix="LH")
         draw_subset(frame, right_hand, HAND_CONNECTIONS, prefix="RH")
@@ -119,7 +126,8 @@ def main():
         parquet_path=parquet_path,
         metadata_json_path=metadata_path,
         split="train",
-        axis_mode='xy'
+        axis_mode='xy',
+        ignore_lower_body=1,
     )
     print(f"[INFO] Loaded dataset with {len(dataset)} samples and {len(dataset.gloss2idx)} classes")
 
@@ -135,7 +143,7 @@ def main():
 
         # Visualize the first sample from first batch
         for idx, feature_tensor in enumerate(features[:3]):
-            plot_landmarks(feature_tensor, f'tmp/{decoded_labels[idx][1]}_batch_{i}_idx_{idx}.mp4', axis_mode='xy')
+            plot_landmarks(feature_tensor, f'tmp/{decoded_labels[idx][1]}_batch_{i}_idx_{idx}.mp4', axis_mode='xy', drop_lower_body=dataset.ignore_lower_body)
 
         if i == 1:
             break

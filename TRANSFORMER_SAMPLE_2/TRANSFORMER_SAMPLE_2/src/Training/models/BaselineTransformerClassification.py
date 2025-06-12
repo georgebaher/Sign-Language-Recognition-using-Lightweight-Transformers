@@ -43,9 +43,11 @@ class BaselineTransformerClassification(nn.Module):
 
         self.transformer = nn.Transformer(hidden_dim, n_heads, 6, 6, batch_first=True)
         self.linear_class = nn.Linear(hidden_dim, num_classes)
+        print(f"[INFO] Transformer model initialized with {'no ' if not w_pe else ''}positional encoding")
 
     def forward(self, inputs):
         h = inputs.float()  # [B, T, D]
+        # print(h.shape)
 
         # Create a mask where all features in a timestep are -2 → it's a padding frame
         src_key_padding_mask = (inputs == -2).all(dim=-1)  # shape: [batch_size, seq_len]
@@ -67,7 +69,7 @@ class BaselineTransformerClassification(nn.Module):
 
 
         # Temporal average pooling
-        pooled = torch.mean(h, dim=1)
+        pooled = torch.mean(h, dim=1)  # [B, 1, D] and automatically the 1 us squeezed out, so it becomes [B, D]
         # print(f"Pooled representations {pooled.shape}:", pooled)
 
         res = self.linear_class(pooled)

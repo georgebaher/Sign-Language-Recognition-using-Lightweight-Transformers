@@ -4,11 +4,17 @@ import random
 import sys
 import time
 from pathlib import Path
+import warnings
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 import numpy as np
 import torch
 import torch.nn as nn
+from transformers import (
+    get_linear_schedule_with_warmup,
+    get_cosine_schedule_with_warmup,
+    get_constant_schedule_with_warmup,
+)
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from dotenv import load_dotenv
@@ -26,6 +32,8 @@ from src.Training.models.BaselineTransformerClassification import BaselineTransf
 
 def get_default_args():
     parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--experiment_name", type=str, default='EXPERIMENT',
+                        help="Specify experment name")
 
     parser.add_argument("--hidden_dim", type=int, default=150,
                         help="Hidden dimension of the underlying Transformer model")
@@ -45,6 +53,8 @@ def get_default_args():
                         choices=["SGD", "adam", "adamW"],
                         default="adamW",
                         help='Type of optimizer. choices=["SGD", "adam", "adamW"]')
+    parser.add_argument("--sgd_momentum", type=float, default=0.0,
+                        help="Momentum value for SGD optimizer. Set to 0.0 for no momentum.")
     parser.add_argument("--dataset_name", type=str,
                         choices=["WLASL100", "AVASAG100"],
                         default="WLASL100",
@@ -52,6 +62,9 @@ def get_default_args():
     parser.add_argument("--features", type=str,
                         default="XYZ",
                         help='features used')
+    parser.add_argument("--ignore_lower_body", type=int,
+                        default=0,
+                        help='ignore or not lower body features')
     parser.add_argument("--num_classes", type=int,
                         default=100,
                         help='number of classes recognized')
@@ -70,6 +83,10 @@ def get_default_args():
                         help="Log frequency (frequency of printing all the training info)")
     parser.add_argument("--batch_size", type=int, default=32,
                         help="batch size")
+    parser.add_argument("--scheduler_type", type=str,
+                        choices=["linear", "cosine", "constant", "none"],
+                        default="none",
+                        help="Learning rate scheduler: 'linear' for warmup + linear decay, 'cosine' for warmup + cosine decay, 'constant' for warmup only, 'none' for no scheduler")
 
     # Checkpointing
     parser.add_argument("--save_checkpoints", type=bool, default=True,
@@ -114,11 +131,10 @@ def train(args):
     fix_randomisation()
     # set device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f'[INFO] running using {device} on <{torch.cuda.get_device_name(0)}>')
+    print(f'[INFO] Running using {device} on <{torch.cuda.get_device_name(0)}>')
     #_____________________________________________________________________#
 
     ##########  PARAMETERS ############
-
     mediapipe_holistic = args.mediapipe_holistic
     dataset_name = args.dataset_name
     padding = args.padding
@@ -128,18 +144,22 @@ def train(args):
     batch_size = args.batch_size
     num_classes = args.num_classes
     optimizer_name = args.optimizer
+    sgd_momentum = args.sgd_momentum
+    scheduler_type = args.scheduler_type
     clip_weights = args.clip_weights
     clip_gradients = args.clip_gradients
-    transform = args.transform  # (Not yet)
+    transform = args.transform  # TODO: implement transformations (Not yet)
     features = args.features
+    ignore_lower_body = args.ignore_lower_body
     pe = args.pe
     epochs = args.epochs
     lr = args.lr
     log_freq = args.log_freq
     save_checkpoints = args.save_checkpoints
-    experiment_name = ", ".join([
+    experiment_args = ", ".join([
         f"dataset={dataset_name}",
         f"features={features}",
+        f"ignore_lower_body={ignore_lower_body}",
         f"num_classes={num_classes}",
         f"model={model2use}",
         f"mediapipe_holistic={True if mediapipe_holistic else False}",
@@ -147,16 +167,18 @@ def train(args):
         f"heads={n_heads}",
         f"PE={pe}",
         f"pad={padding}",
-        f"clip={clip_weights}",
+        f"clip_weights={clip_weights}",
+        f"clip_gradients={clip_gradients}",
         f"opt={optimizer_name}",
+        f"sgd_momentum={sgd_momentum}",
+        f"scheduler={scheduler_type}",
         f"bs={batch_size}",
         f"epochs={epochs}",
         f"lr={lr:.0e}",  # scientific notation (e.g., 1e-03)
         f"logfreq={log_freq}",
         f"checkpoints={save_checkpoints}",
     ])
-
-    print(f">>>> Experiment name:\n {experiment_name} <<<<")
+    experiment_name = args.experiment_name
 
     # Set the output format to print into the console and save into LOG file
     log_dir = "out-logs"  # or "out-logs", "results/logs", etc.
@@ -181,15 +203,7 @@ def train(args):
     model.train(True)
     model.to(device)  # moves model to cpu or gpu if available
 
-    print(f"[INFO] using GPU memory: {torch.cuda.memory_allocated() / 1024 / 1024} MB")
-
-    loss_fn = nn.CrossEntropyLoss()
-
-    optimizer = "SGD"
-    if optimizer_name == "adam":
-        optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-    elif optimizer_name == "adamW":
-        optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
+    print(f"[INFO] Using GPU memory: {torch.cuda.memory_allocated() / 1024 / 1024} MB")
 
     # Ensure that the path for checkpointing and for images both exist
     Path("out-checkpoints/" + experiment_name + "/").mkdir(parents=True, exist_ok=True)
@@ -198,95 +212,135 @@ def train(args):
     ############### DATA LOADERS #####################
     train_set = val_set = test_set = None
     if dataset_name == "WLASL100":
-        print("Processing WLASL100...")
+        print("[INFO] Processing WLASL100 dataset...")
+
         # Training set
         train_set = WLASLParquetDataset(parquet_path=os.getenv('WLASL100_HAND_POSE_LANDMARKS_PATH'),
                                         metadata_json_path=os.getenv('WLASL_METADATA_PATH'),
                                         split='train',
                                         transform=transform,
-                                        axis_mode=features
+                                        axis_mode=features,
+                                        ignore_lower_body=ignore_lower_body
                                         )
-        print(f"[INFO] Loaded train dataset with {len(train_set)} samples, {len(train_set.gloss2idx)} classes and shape {train_set.__getitem__(0)[0].shape}")
+        print(f"       loaded train dataset with {len(train_set)} samples, {len(train_set.gloss2idx)} classes and shape {train_set.__getitem__(0)[0].shape}")
+
         # Validation set
         val_set = WLASLParquetDataset(parquet_path=os.getenv('WLASL100_HAND_POSE_LANDMARKS_PATH'),
                                       metadata_json_path=os.getenv('WLASL_METADATA_PATH'),
                                       split='val',
                                       transform=transform,
-                                      axis_mode=features
+                                      axis_mode=features,
+                                      ignore_lower_body=ignore_lower_body
                                       )
         print(
-            f"[INFO] Loaded val dataset with {len(val_set)} samples, {len(val_set.gloss2idx)} classes and shape {val_set.__getitem__(0)[0].shape}")
+            f"       loaded val dataset with {len(val_set)} samples, {len(val_set.gloss2idx)} classes and shape {val_set.__getitem__(0)[0].shape}")
+
         # Test
         test_set = WLASLParquetDataset(parquet_path=os.getenv('WLASL100_HAND_POSE_LANDMARKS_PATH'),
                                        metadata_json_path=os.getenv('WLASL_METADATA_PATH'),
                                        split='test',
                                        transform=transform,
-                                       axis_mode=features
+                                       axis_mode=features,
+                                       ignore_lower_body=ignore_lower_body
                                        )
         print(
-            f"[INFO] Loaded test dataset with {len(test_set)} samples, {len(test_set.gloss2idx)} classes and shape {test_set.__getitem__(0)[0].shape}")
+            f"       loaded test dataset with {len(test_set)} samples, {len(test_set.gloss2idx)} classes and shape {test_set.__getitem__(0)[0].shape}")
 
     elif dataset_name == "AVASAG":
-        print("Processing AVASAG...")
+        print("[INFO] Processing AVASAG100 dataset...")
         # TODO: load AVASAG100 dataset (Not yet)
 
     train_loader = DataLoader(train_set, shuffle=True, batch_size=batch_size)
     val_loader = DataLoader(val_set, shuffle=False, batch_size=batch_size)
     test_loader = DataLoader(test_set, shuffle=False, batch_size=1)
 
+    ####################### LOSS FUNCTION, OPTIMIZER & SCHEDULER #####################
+    loss_fn = nn.CrossEntropyLoss()
+    if optimizer_name == "SGD":
+        optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=sgd_momentum)
+    elif optimizer_name == "adam":
+        optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    elif optimizer_name == "adamW":
+        optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-3)
+
+    # Setup scheduler for warmup
+    total_steps = len(train_loader) * args.epochs
+    warmup_steps = int(0.1 * total_steps)  # 10% warm-up
+
+    if scheduler_type == "cosine":
+        scheduler = get_cosine_schedule_with_warmup(
+            optimizer,
+            num_warmup_steps=warmup_steps,
+            num_training_steps=total_steps
+        )
+    elif scheduler_type == "linear":
+        scheduler = get_linear_schedule_with_warmup(
+            optimizer,
+            num_warmup_steps=warmup_steps,
+            num_training_steps=total_steps
+        )
+    elif scheduler_type == "constant":
+        scheduler = get_constant_schedule_with_warmup(
+            optimizer,
+            num_warmup_steps=warmup_steps
+        )
+    elif scheduler_type == "none":
+        scheduler = None
+    else:
+        raise ValueError(f"Unknown scheduler type: {scheduler_type}")
+
     ####################### TRAINING / VALIDATION #####################
     average_train_acc, average_val_acc = 0, 0
-    losses, train_accs, val_accs = [], [], []
+    train_losses, train_accs, val_losses, val_accs = [], [], [], []
     lr_progress = []
     top_train_acc, top_val_acc = 0, 0
     checkpoint_index = 0
 
-    print("[INFO] Starting {" + experiment_name + "}...\n\n")
-    logging.info("Starting " + experiment_name + "...\n\n")
+    print("[INFO] Starting experiment " + experiment_name + "...\n\n")
+    logging.info("[INFO] Starting experiment " + experiment_name + "...\n\n")
 
     start = time.time()
 
     for epoch in range(args.epochs):
-        average_train_loss, average_train_acc = train_epoch_batch(model, train_loader, loss_fn, optimizer, device,
+        average_train_loss, average_train_acc = train_epoch_batch(model, train_loader, loss_fn, optimizer, device, scheduler=scheduler,
                                                                   batch_size=batch_size, clip_gradients=clip_gradients, clip_weights=clip_weights)
-        losses.append(average_train_loss)
+        train_losses.append(average_train_loss)
         train_accs.append(average_train_acc)
 
         if val_loader:
             model.train(False)
-            average_val_acc, _ = evaluate_batch(model, val_loader, device)
+            average_val_loss, average_val_acc, _ = evaluate_batch(model, loss_fn, val_loader, device, False)
             model.train(True)
+            val_losses.append(average_val_loss)
             val_accs.append(average_val_acc)
 
         # Save checkpoints if they are best in the current subset
         if args.save_checkpoints:
             if average_train_acc > top_train_acc:
                 top_train_acc = average_train_acc
-                print("... Saving checkpoint: out-checkpoints/" + experiment_name + "/checkpoint_v_" + str(
+                print("... Saving checkpoint: out-checkpoints/" + experiment_name + "/checkpoint_t" + str(
                     checkpoint_index) + ".pth")
                 torch.save(model,
-                           "out-checkpoints/" + experiment_name + "/checkpoint_t_" + str(checkpoint_index) + ".pth")
+                           "out-checkpoints/" + experiment_name + "/checkpoint_t" + str(checkpoint_index) + ".pth")
 
             if average_val_acc > top_val_acc:
                 top_val_acc = average_val_acc
-                print("... Saving checkpoint: out-checkpoints/" + experiment_name + "/checkpoint_v_" + str(
+                print("... Saving checkpoint: out-checkpoints/" + experiment_name + "/checkpoint_v" + str(
                     checkpoint_index) + ".pth")
                 torch.save(model,
-                           "out-checkpoints/" + experiment_name + "/checkpoint_v_" + str(checkpoint_index) + ".pth")
+                           "out-checkpoints/" + experiment_name + "/checkpoint_v" + str(checkpoint_index) + ".pth")
 
         if epoch % args.log_freq == 0:
-            print("[" + str(epoch + 1) + "] TRAIN  loss: " + str(average_train_loss) + " acc: " + str(
+            print("[" + str(epoch + 1) + "] TRAIN | loss: " + str(average_train_loss) + ", acc: " + str(
                 average_train_acc))
             logging.info(
-                "[" + str(epoch + 1) + "] TRAIN  loss: " + str(average_train_loss) + " acc: " + str(
+                "[" + str(epoch + 1) + "] TRAIN | loss: " + str(average_train_loss) + ", acc: " + str(
                     average_train_acc))
 
             if val_loader:
-                print("[" + str(epoch + 1) + "] VALIDATION  acc: " + str(average_val_acc))
-                logging.info("[" + str(epoch + 1) + "] VALIDATION  acc: " + str(average_val_acc))
+                print("[" + str(epoch + 1) + "] VALIDATION | acc: " + str(average_val_acc))
+                logging.info("[" + str(epoch + 1) + "] VALIDATION | acc: " + str(average_val_acc))
 
-            print("")
-            logging.info("")
 
         # Reset the top accuracies on static subsets
         if epoch % 10 == 0:
@@ -296,75 +350,72 @@ def train(args):
         lr_progress.append(optimizer.param_groups[0]["lr"])
 
     ####################### TESTING #####################
-    print("\n>>>>>Testing checkpointed models starting...\n")
-    logging.info("\nTesting checkpointed models starting...\n")
+    print("\n[INFO] Testing checkpointed models starting...\n")
+    logging.info("Testing checkpointed models starting...\n")
     top_result, top_result_name = 0, ""
 
     if test_loader:
         for i in range(checkpoint_index + 1):
             for checkpoint_id in ["t", "v"]:
                 # tested_model = VisionTransformer(dim=2, mlp_dim=108, num_classes=100, depth=12, heads=8)
-                tested_model = torch.load(
-                    "out-checkpoints/" + experiment_name + "/checkpoint_" + checkpoint_id + "_" + str(i) + ".pth")
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", category=FutureWarning)
+                    tested_model = torch.load(
+                        "out-checkpoints/" + experiment_name + "/checkpoint_" + checkpoint_id + str(i) + ".pth"
+                    )
                 tested_model.eval()
                 tested_model.train(False)
-                eval_acc, _ = evaluate_batch(tested_model, test_loader, device, print_stats=True)
+                _, eval_acc, _ = evaluate_batch(tested_model, loss_fn, test_loader, device, print_stats=False)
 
                 if eval_acc > top_result:
                     top_result = eval_acc
                     top_result_name = experiment_name + "/checkpoint_" + checkpoint_id + "_" + str(i)
 
-                print("checkpoint_" + checkpoint_id + "_" + str(i) + "  ->  " + str(eval_acc))
-                logging.info("checkpoint_" + checkpoint_id + "_" + str(i) + "  ->  " + str(eval_acc))
+                print("checkpoint_" + checkpoint_id + str(i) + "  ->  " + str(eval_acc))
+                logging.info("checkpoint_" + checkpoint_id + str(i) + "  ->  " + str(eval_acc))
 
         end = time.time()
         elapsed_time = end - start
         print("\nThe top result was recorded at " + str(
             top_result) + " testing accuracy. The best checkpoint is " + top_result_name + ".")
-        logging.info("\nThe top result was recorded at " + str(
+        logging.info("The top result was recorded at " + str(
             top_result) + " testing accuracy. The best checkpoint is " + top_result_name + ".")
-        logging.info("\n ----------------Config information----------------------- \n")
-        logging.info("- Features:" + str(features) + "\n")
-        logging.info("- Model:" + str(model2use) + "\n")
-        logging.info("- Batch size:" + str(batch_size) + "\n")
-        logging.info("- Opt: " + str(optimizer) + "\n")
-        # logging.info("- Max. Len:" + str(max_len_videos) + "\n")
-        logging.info("- N landm.:" + str(hidden_dim) + "\n")
-        logging.info("- N heads:" + str(n_heads) + "\n")
-        logging.info("- Transform (data Augm.):" + str(transform) + "\n")
-        logging.info(" - Elapsed Time training (seconds): " + str(elapsed_time) + "\n")
+        logging.info("----------------Config information----------------------- ")
+        logging.info(" - Elapsed Time training (seconds): " + str(elapsed_time))
+        logging.info("- Experiment Args: " + str(experiment_args))
 
-    # # PLOT 0: Performance (loss, accuracies) chart plotting
-    # if args.plot_stats:
-    #     fig, ax = plt.subplots()
-    #     ax.plot(range(1, len(losses) + 1), losses, c="#D64436", label="Training loss")
-    #     ax.plot(range(1, len(train_accs) + 1), train_accs, c="#00B09B", label="Training accuracy")
-    #
-    #     if val_loader:
-    #         ax.plot(range(1, len(val_accs) + 1), val_accs, c="#E0A938", label="Validation accuracy")
-    #
-    #     ax.xaxis.set_major_locator(ticker.MaxNLocator(integer=True))
-    #
-    #     ax.set(xlabel="Epoch", ylabel="Accuracy / Loss", title="")
-    #     plt.legend(loc="upper center", bbox_to_anchor=(0.5, 1.05), ncol=4, fancybox=True, shadow=True,
-    #                fontsize="xx-small")
-    #     ax.grid()
-    #
-    #     fig.savefig("out-img/" + experiment_name + "_loss.png")
-    #
-    # # PLOT 1: Learning rate progress
-    # if args.plot_lr:
-    #     fig1, ax1 = plt.subplots()
-    #     ax1.plot(range(1, len(lr_progress) + 1), lr_progress, label="LR")
-    #     ax1.set(xlabel="Epoch", ylabel="LR", title="")
-    #     ax1.grid()
-    #
-    #     fig1.savefig("out-img/" + experiment_name + "_lr.png")
-    #
-    # print("\nAny desired statistics have been plotted.\nThe experiment is finished.")
-    # logging.info("\nAny desired statistics have been plotted.\nThe experiment is finished.")
+    # PLOT 0: Performance (loss, accuracies) chart plotting
+    if args.plot_stats:
+        fig, ax = plt.subplots()
+        ax.plot(range(1, len(train_losses) + 1), train_losses, c="#D64436", label="Training loss")
+        ax.plot(range(1, len(train_accs) + 1), train_accs, c="#00B09B", label="Training accuracy")
+
+        if val_loader:
+            ax.plot(range(1, len(val_losses) + 1), val_losses, c="#002213", label="Validation loss")
+            ax.plot(range(1, len(val_accs) + 1), val_accs, c="#E0A938", label="Validation accuracy")
+
+        ax.xaxis.set_major_locator(ticker.MaxNLocator(integer=True))
+
+        ax.set(xlabel="Epoch", ylabel="Accuracy / Loss", title="")
+        plt.legend(loc="upper center", bbox_to_anchor=(0.5, 1.05), ncol=4, fancybox=True, shadow=True,
+                   fontsize="xx-small")
+        ax.grid()
+
+        fig.savefig("out-img/" + experiment_name + "_loss.png")
+
+    # PLOT 1: Learning rate progress
+    if args.plot_lr:
+        fig1, ax1 = plt.subplots()
+        ax1.plot(range(1, len(lr_progress) + 1), lr_progress, label="LR")
+        ax1.set(xlabel="Epoch", ylabel="LR", title="")
+        ax1.grid()
+
+        fig1.savefig("out-img/" + experiment_name + "_lr.png")
+
+    print("\nAny desired statistics have been plotted.\nThe experiment is finished.")
+    logging.info("\nAny desired statistics have been plotted.\nThe experiment is finished.")
     print("\nThe experiment is finished.")
-    logging.info("\nThe experiment is finished.")
+    logging.info("The experiment is finished.")
 
 
 if __name__ == '__main__':

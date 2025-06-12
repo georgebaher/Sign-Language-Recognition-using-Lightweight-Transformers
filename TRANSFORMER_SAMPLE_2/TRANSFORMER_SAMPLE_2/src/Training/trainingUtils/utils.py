@@ -48,7 +48,7 @@ import torch
 
 def count_success(preds, labels, calc_stats=False):
     counter_success = 0
-    stats = {i: [0,0] for i in range(0, 101)}
+    stats = {i: [0, 0] for i in range(0, 100)}
     for i_bs in range(preds.shape[0]):
         if preds[i_bs] == labels[i_bs]:
             counter_success += 1
@@ -80,13 +80,18 @@ def train_epoch_batch(model, dataloader, loss_fn, optimizer, device, scheduler=N
         if clip_gradients:
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
 
-        optimizer.step()
-
         # Weight clipping
         if clip_weights:
             with torch.no_grad():
                 for param in model.parameters():
                     param.clamp_(-0.5, 0.5)
+
+        # Step optimizer and scheduler
+        optimizer.step()
+        if scheduler:
+            scheduler.step()
+
+
 
         # # Visualize gradients
         # for name, param in model.named_parameters():
@@ -103,34 +108,44 @@ def train_epoch_batch(model, dataloader, loss_fn, optimizer, device, scheduler=N
     average_running_loss = running_loss / len(dataloader)
     average_running_acc = pred_correct / pred_all
 
-    if scheduler:
-        scheduler.step(running_loss.item() / (len(dataloader)*batch_size))
-
-    print(">>> Total Train: ", str(pred_all))
+    print("\n>>> Total Train: ", str(pred_all))
     return average_running_loss, average_running_acc
 
 
 
-def evaluate_batch(model, dataloader, device, print_stats=False):
+def evaluate_batch(model, loss_fn, dataloader, device, print_stats=False):
     pred_correct, pred_all = 0, 0
-
+    stats = {i: [0, 0] for i in range(100)}  # Assuming 100 classes
+    val_loss = 0.0
     for i, data in enumerate(dataloader):
         batch, labels = data
-        batch = batch.to(device)
 
+        batch = batch.to(device)
         labels = labels.to(device, dtype=torch.long)
+
         outputs = model(batch)
         outs_squeeze = outputs.squeeze(1)  # remove the temporal dimension
+
+        loss = loss_fn(outs_squeeze, labels)  # loss = criterion(outputs[0], labels[0])
+        val_loss += loss.item()
 
         # Statistics
         preds = torch.argmax(outs_squeeze, dim=1)  # [bs,1]
         # print('predictions:', preds)
         # print('labels:', labels)
-        pred_correct_i, stats = count_success(preds, labels, calc_stats=True)
+        pred_correct_i, batch_stats = count_success(preds, labels, calc_stats=True)
+
+        # Accumulate stats
+        for k in batch_stats:
+            stats[k][0] += batch_stats[k][0]  # correct
+            stats[k][1] += batch_stats[k][1]  # total
 
         pred_correct += pred_correct_i
         pred_all += preds.shape[0]  # it should be equal to batch size
 
+    average_val_loss = val_loss / len(dataloader)
+
+    print(">>> Total Validation: ", str(pred_all))
     if print_stats:
         stats = {key: value[0] / value[1] for key, value in stats.items() if value[1] != 0}
         print("Validation accuracies statistics:")
@@ -138,9 +153,9 @@ def evaluate_batch(model, dataloader, device, print_stats=False):
         logging.info("Validation accuracies statistics:")
         logging.info(str(stats) + "\n")
 
-    print(">>> Total Validation: ", str(pred_all))
+
     average_val_acc = pred_correct / pred_all
-    return average_val_acc, stats
+    return average_val_loss, average_val_acc, stats
 
 
 

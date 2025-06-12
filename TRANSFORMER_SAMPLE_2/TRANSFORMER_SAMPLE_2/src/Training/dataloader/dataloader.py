@@ -6,7 +6,9 @@ import numpy as np
 
 
 class WLASLParquetDataset(Dataset):
-    def __init__(self, parquet_path, metadata_json_path, split="train", transform=None, max_len=None, axis_mode='xyz'):
+    def __init__(self, parquet_path, metadata_json_path, split="train",
+                 transform=None, max_len=None, axis_mode='xyz',
+                 ignore_lower_body=False):
         if parquet_path is None:
             raise ValueError("parquet_path cannot be None")
         if metadata_json_path is None:
@@ -15,7 +17,8 @@ class WLASLParquetDataset(Dataset):
         self.transform = transform
         self.split = split
         self.max_len = max_len  # depends on features chosen
-        self.axis_mode = axis_mode.lower()  # Select axis to take
+        self.axis_mode = axis_mode.lower()  # select axis to take
+        self.ignore_lower_body = ignore_lower_body  # whether to include lower body parts
 
         # Load metadata and filter by split
         with open(metadata_json_path, "r") as f:
@@ -62,7 +65,7 @@ class WLASLParquetDataset(Dataset):
         if self.max_len is None:
             self.max_len = self.max_seq_len  # Use max frames in dataset if not manually specified
 
-        print(f"[INFO] Max sequence length in dataset is {self.max_seq_len}")
+        # print(f"[INFO] Max sequence length in dataset is {self.max_seq_len}")
 
 
     def __len__(self):
@@ -86,6 +89,14 @@ class WLASLParquetDataset(Dataset):
             pass  # keep all
         else:
             raise ValueError(f"[ERROR] Invalid axis_mode: {self.axis_mode}")
+
+        # Drop lower body landmarks P#23–P#32 (each has x, y, z)
+        if self.ignore_lower_body:
+            for i in range(23, 33):
+                for axis in ['x', 'y', 'z']:
+                    col_name = f'P#{i}_{axis}'
+                    if col_name in features_df.columns:
+                        features_df = features_df.drop(columns=[col_name])
 
         # Now convert to NumPy
         features = features_df.values.astype(np.float32)
