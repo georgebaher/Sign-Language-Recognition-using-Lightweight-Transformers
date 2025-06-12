@@ -3,12 +3,17 @@ from torch.utils.data import Dataset
 import pandas as pd
 import json
 import numpy as np
-
+from Feature_Processing.feature_selection.features.hand_angles_features import TOP_ANGLE_BASES as hand_angles
+from Feature_Processing.feature_selection.features.hand_pose_angles_features import TOP_ANGLE_BASES as hand_pose_angles
+from Feature_Processing.feature_selection.features.hand_landmarks_features import TOP_LANDMARKS_BASES as hand_landmarks
+from Feature_Processing.feature_selection.features.hand_pose_landmarks_features import TOP_LANDMARKS_BASES as hand_pose_landmarks
+from Feature_Processing.feature_selection.features.pose_landmarks_features import TOP_LANDMARKS_BASES as pose_landmarks
+from Feature_Processing.feature_selection.features.pose_angles_features import TOP_ANGLE_BASES as pose_angles
 
 class WLASLParquetDataset(Dataset):
     def __init__(self, parquet_path, metadata_json_path, split="train",
-                 transform=None, max_len=None, axis_mode='xyz',
-                 ignore_lower_body=False):
+                 transform=None, max_len=None, features='hand_pose_landmarks', fs=0,
+                 n_heads=8):
         if parquet_path is None:
             raise ValueError("parquet_path cannot be None")
         if metadata_json_path is None:
@@ -17,8 +22,9 @@ class WLASLParquetDataset(Dataset):
         self.transform = transform
         self.split = split
         self.max_len = max_len  # depends on features chosen
-        self.axis_mode = axis_mode.lower()  # select axis to take
-        self.ignore_lower_body = ignore_lower_body  # whether to include lower body parts
+        self.features = features.lower()  # select features to take
+        self.fs = fs  # use feature selection or not
+        self.n_heads = n_heads
 
         # Load metadata and filter by split
         with open(metadata_json_path, "r") as f:
@@ -82,21 +88,56 @@ class WLASLParquetDataset(Dataset):
 
         features_df = group.drop(columns=["gloss", "video_id"], errors="ignore")
 
-        # Filter columns by axis_mode
-        if self.axis_mode == "xy":
-            features_df = features_df[[col for col in features_df.columns if not col.endswith('_z')]]
-        elif self.axis_mode == "xyz":
-            pass  # keep all
-        else:
-            raise ValueError(f"[ERROR] Invalid axis_mode: {self.axis_mode}")
+        # Feature selection logic
+        if self.fs == 1:
+            if self.features == "hand_angles":
+                selected_features = hand_angles
+            elif self.features == "pose_angles":
+                selected_features = pose_angles
+            elif self.features == "hand_pose_angles":
+                selected_features = hand_pose_angles
+            elif self.features == "hand_landmarks":
+                selected_features = hand_landmarks
+            elif self.features == "pose_landmarks":
+                selected_features = pose_landmarks
+            elif self.features == "hand_pose_landmarks":
+                selected_features = hand_pose_landmarks
+            else:
+                raise ValueError(f"[ERROR] Unknown feature selection group: {self.features}")
+            # Keep only the selected features
+            if "landmarks" in self.features:
+                features_df = features_df[[col for col in features_df.columns if col.split("_")[0] in selected_features]]
+            else:
+                features_df = features_df[[col for col in features_df.columns if col in selected_features]]
 
-        # Drop lower body landmarks P#23–P#32 (each has x, y, z)
-        if self.ignore_lower_body:
-            for i in range(23, 33):
-                for axis in ['x', 'y', 'z']:
-                    col_name = f'P#{i}_{axis}'
-                    if col_name in features_df.columns:
-                        features_df = features_df.drop(columns=[col_name])
+
+        # Drop any pose landmark or pose angle involving landmarks 25–32 "lower limbs"
+        if self.features in ["pose_landmarks", "pose_angles", "hand_pose_landmarks", "hand_pose_angles"]:
+            def is_forbidden_pose_column(col_name):
+                # Pose landmark format: "P#25", "P#31", etc.
+                if col_name.startswith("P#"):
+                    try:
+                        idx = int(col_name.split("_")[0].replace("P#", ""))
+                        return 25 <= idx <= 32
+                    except:
+                        return False
+                # Pose angle format: "P_Angle{(12, 14)-(2, 3)}"
+                elif "P_Angle{" in col_name:
+                    try:
+                        numbers = [int(n) for n in
+                                   col_name.replace("P_Angle{", "").replace("}", "").replace("(", "").replace(")",
+                                                                                                              "").replace(
+                                       "-", ",").split(",")]
+                        return any(25 <= n <= 32 for n in numbers)
+                    except:
+                        return False
+                return False
+
+            features_df = features_df[[col for col in features_df.columns if not is_forbidden_pose_column(col)]]
+
+        # Drop z-axis if using landmarks
+        if "landmarks" in self.features:
+            features_df = features_df[[col for col in features_df.columns if not col.endswith('_z')]]
 
         # Now convert to NumPy
         features = features_df.values.astype(np.float32)
@@ -108,9 +149,17 @@ class WLASLParquetDataset(Dataset):
         # if self.transform:
         #     feature_tensor = self.transform(feature_tensor)
 
+        # Pad feature dimension to be divisible by number of heads
+        if self.n_heads is not None and feature_tensor.shape[1] % self.n_heads != 0:
+            feat_dim = feature_tensor.shape[1]
+            target_dim = ((feat_dim + self.n_heads - 1) // self.n_heads) * self.n_heads
+            pad_width = target_dim - feat_dim
+            pad_column = torch.full((feature_tensor.shape[0], pad_width), fill_value=-2.0)
+            feature_tensor = torch.cat([feature_tensor, pad_column], dim=1)
+
         # Pad feature dimension to even number if it's odd (for Positional Encoding)
         if feature_tensor.shape[1] % 2 != 0:
-            pad_column = torch.full((feature_tensor.shape[0], 3), fill_value=-2.0)
+            pad_column = torch.full((feature_tensor.shape[0], 1), fill_value=-2.0)
             feature_tensor = torch.cat([feature_tensor, pad_column], dim=1)
 
         # Pad to max_len

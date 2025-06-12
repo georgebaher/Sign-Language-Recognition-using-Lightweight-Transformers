@@ -37,6 +37,7 @@ class BaselineTransformerClassification(nn.Module):
     """
 
     def __init__(self, num_classes, hidden_dim=55, n_heads=9, max_seq_len=50, w_pe=True):
+        print(f"[INFO] Initializing Baseline Transformer with {n_heads} heads and {hidden_dim} hidden_dim.")
         super().__init__()
 
         self.output_pos_encoding = PositionalEncodingSinCos(d_model=hidden_dim, dropout=0.0, w_pe=w_pe)

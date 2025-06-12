@@ -35,7 +35,7 @@ def get_default_args():
     parser.add_argument("--experiment_name", type=str, default='EXPERIMENT',
                         help="Specify experment name")
 
-    parser.add_argument("--hidden_dim", type=int, default=150,
+    parser.add_argument("--hidden_dim", type=int, default=0,
                         help="Hidden dimension of the underlying Transformer model")
     parser.add_argument("--n_heads", type=int, default=9,
                         help="Hidden dimension of the underlying Transformer model")
@@ -60,14 +60,15 @@ def get_default_args():
                         default="WLASL100",
                         help='Dataset used. choices=["WLASL100", "AVASAG100"]')
     parser.add_argument("--features", type=str,
-                        default="XYZ",
-                        help='features used')
-    parser.add_argument("--ignore_lower_body", type=int,
+                        choices=["HAND_LANDMARKS", "POSE_LANDMARKS", "HAND_POSE_LANDMARKS", "HAND_ANGLES", "POSE_ANGLES", "HAND_POSE_ANGLES"],
+                        default="HAND_POSE_LANDMARKS",
+                        help='Features used. Choices=["HAND_LANDMARKS", "POSE_LANDMARKS", "HAND_POSE_LANDMARKS", "HAND_ANGLES", "POSE_ANGLES", "HAND_POSE_ANGLES"]')
+    parser.add_argument("--fs", type=int,
                         default=0,
-                        help='ignore or not lower body features')
+                        help='Use feature selection')
     parser.add_argument("--num_classes", type=int,
                         default=100,
-                        help='number of classes recognized')
+                        help='Number of classes recognized')
 
     # Landmarks library
     parser.add_argument("--mediapipe_holistic", type=str, default='True',
@@ -150,7 +151,7 @@ def train(args):
     clip_gradients = args.clip_gradients
     transform = args.transform  # TODO: implement transformations (Not yet)
     features = args.features
-    ignore_lower_body = args.ignore_lower_body
+    fs = args.fs
     pe = args.pe
     epochs = args.epochs
     lr = args.lr
@@ -159,7 +160,7 @@ def train(args):
     experiment_args = ", ".join([
         f"dataset={dataset_name}",
         f"features={features}",
-        f"ignore_lower_body={ignore_lower_body}",
+        f"fs={fs}",
         f"num_classes={num_classes}",
         f"model={model2use}",
         f"mediapipe_holistic={True if mediapipe_holistic else False}",
@@ -185,6 +186,10 @@ def train(args):
     os.makedirs(log_dir, exist_ok=True)  # Create the directory if it doesn't exist
     log_path = os.path.join(log_dir, f"{experiment_name}.log")
 
+    # Clear previous logging handlers to allow reconfiguration
+    for handler in logging.root.handlers[:]:
+        logging.root.removeHandler(handler)
+
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(message)s",
@@ -196,7 +201,7 @@ def train(args):
 
     ##################### MODELS #########################
     # Construct the model
-    # FOR NOW, ONLY ONE MODEL VARIATION
+    # FOR NOW, ONLY ONE MODEL
 
     model = BaselineTransformerClassification(num_classes=num_classes, hidden_dim=hidden_dim,
                                               n_heads=n_heads, w_pe=pe)
@@ -211,37 +216,58 @@ def train(args):
 
     ############### DATA LOADERS #####################
     train_set = val_set = test_set = None
+
     if dataset_name == "WLASL100":
+        # Map feature type to environment variable names
+        feature_parquet_map = {
+            "HAND_LANDMARKS": "WLASL100_HAND_LANDMARKS_PATH",
+            "POSE_LANDMARKS": "WLASL100_POSE_LANDMARKS_PATH",
+            "HAND_POSE_LANDMARKS": "WLASL100_HAND_POSE_LANDMARKS_PATH",
+            "HAND_ANGLES": "WLASL100_HAND_ANGLES_PATH",
+            "POSE_ANGLES": "WLASL100_POSE_ANGLES_PATH",
+            "HAND_POSE_ANGLES": "WLASL100_HAND_POSE_ANGLES_PATH",
+        }
+        # Resolve parquet path based on selected feature type
+        parquet_env_var = feature_parquet_map.get(features.upper())
+        if parquet_env_var is None:
+            raise ValueError(f"Unknown feature type: {features}")
+        parquet_path = os.getenv(parquet_env_var)
+        if parquet_path is None:
+            raise ValueError(f"Environment variable {parquet_env_var} is not set")
+
         print("[INFO] Processing WLASL100 dataset...")
 
         # Training set
-        train_set = WLASLParquetDataset(parquet_path=os.getenv('WLASL100_HAND_POSE_LANDMARKS_PATH'),
+        train_set = WLASLParquetDataset(parquet_path=parquet_path,
                                         metadata_json_path=os.getenv('WLASL_METADATA_PATH'),
                                         split='train',
                                         transform=transform,
-                                        axis_mode=features,
-                                        ignore_lower_body=ignore_lower_body
+                                        features=features,
+                                        fs=fs,
+                                        n_heads=n_heads
                                         )
         print(f"       loaded train dataset with {len(train_set)} samples, {len(train_set.gloss2idx)} classes and shape {train_set.__getitem__(0)[0].shape}")
 
         # Validation set
-        val_set = WLASLParquetDataset(parquet_path=os.getenv('WLASL100_HAND_POSE_LANDMARKS_PATH'),
+        val_set = WLASLParquetDataset(parquet_path=parquet_path,
                                       metadata_json_path=os.getenv('WLASL_METADATA_PATH'),
                                       split='val',
                                       transform=transform,
-                                      axis_mode=features,
-                                      ignore_lower_body=ignore_lower_body
+                                      features=features,
+                                      fs=fs,
+                                      n_heads=n_heads
                                       )
         print(
             f"       loaded val dataset with {len(val_set)} samples, {len(val_set.gloss2idx)} classes and shape {val_set.__getitem__(0)[0].shape}")
 
         # Test
-        test_set = WLASLParquetDataset(parquet_path=os.getenv('WLASL100_HAND_POSE_LANDMARKS_PATH'),
+        test_set = WLASLParquetDataset(parquet_path=parquet_path,
                                        metadata_json_path=os.getenv('WLASL_METADATA_PATH'),
                                        split='test',
                                        transform=transform,
-                                       axis_mode=features,
-                                       ignore_lower_body=ignore_lower_body
+                                       features=features,
+                                       fs=fs,
+                                       n_heads=n_heads
                                        )
         print(
             f"       loaded test dataset with {len(test_set)} samples, {len(test_set.gloss2idx)} classes and shape {test_set.__getitem__(0)[0].shape}")
@@ -401,7 +427,7 @@ def train(args):
                    fontsize="xx-small")
         ax.grid()
 
-        fig.savefig("out-img/" + experiment_name + "_loss.png")
+        fig.savefig("out-img/experiment_name/" + "_loss.png")
 
     # PLOT 1: Learning rate progress
     if args.plot_lr:
@@ -410,20 +436,65 @@ def train(args):
         ax1.set(xlabel="Epoch", ylabel="LR", title="")
         ax1.grid()
 
-        fig1.savefig("out-img/" + experiment_name + "_lr.png")
+        fig1.savefig("out-img/experiment_name/" + "_lr.png")
 
     print("\nAny desired statistics have been plotted.\nThe experiment is finished.")
     logging.info("\nAny desired statistics have been plotted.\nThe experiment is finished.")
     print("\nThe experiment is finished.")
     logging.info("The experiment is finished.")
 
+    # Return highest accuracy
+    return top_result
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser("", parents=[get_default_args()], add_help=False)
-    args = parser.parse_args()
+    base_args = parser.parse_args()
 
-    # loop experiments:
-    # for batch_size in [1, 10, 50, 100]: # 1, 10, 50, 100
-    #     for complete_block in [True, False]:
-    #         for PE in [True, False]:
-    train(args)
+    all_features = [
+        "HAND_LANDMARKS",
+        "POSE_LANDMARKS",
+        "HAND_POSE_LANDMARKS",
+        "HAND_ANGLES",
+        "POSE_ANGLES",
+        "HAND_POSE_ANGLES"
+    ]
+    all_fs = [0, 1]  # No feature selection, then with FS
+    hidden_dims = [(88, 88), (56, 48), (136, 104), (424, 320), (304, 232), (720, 520)]    # manually calculated with n_heads=8
+    results = []
+
+    for i, feature in enumerate(all_features):
+        for j, fs in enumerate(all_fs):
+            args = argparse.Namespace(**vars(base_args))  # deep copy base args
+            args.features = feature
+            args.fs = fs
+            args.experiment_name = f"{feature.lower()}_fs{fs}"
+            args.dataset_name = "WLASL100"
+            args.n_heads = 8
+            args.pe = 0
+            args.optimizer = "SGD"
+            args.sgd_momentum = 0.9
+            args.lr = 1e-3
+            args.epochs = 100
+            args.batch_size = 32
+            args.hidden_dim = hidden_dims[i][j]
+            args.scheduler_type = "cosine"
+
+            print(f"\n[INFO] Running experiment: {args.experiment_name}")
+            top_acc = train(args)
+            results.append({
+                "feature": feature,
+                "fs": fs,
+                "top_acc": top_acc
+            })
+
+    # Save results to a text file
+    results_path = "out-logs/experiment_results.txt"
+    with open(results_path, "w") as f:
+        f.write("==== EXPERIMENT COMPARISON ====\n")
+        f.write("{:<25} {:<5} {:<10}\n".format("Feature", "FS", "Top Accuracy"))
+        f.write("-" * 45 + "\n")
+        for res in results:
+            f.write("{:<25} {:<5} {:.2f}\n".format(res["feature"], res["fs"], res["top_acc"] * 100))
+
+    print(f"\n[INFO] Saved experiment results to {results_path}")
