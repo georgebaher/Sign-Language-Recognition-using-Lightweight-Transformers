@@ -6,7 +6,7 @@ import mediapipe as mp
 class PoseModel(object):
     """
     Params
-        landmarks: List of 33 pose landmark positions (length 33*3 = 99)
+        landmarks: List of 33 pose landmark positions
     Args
         connections: List of tuples containing the ids of the two landmarks representing a connection
         feature_vector: List of length C * (C - 1) / 2 containing the angles between unique connection pairs
@@ -15,7 +15,7 @@ class PoseModel(object):
     def __init__(self, landmarks: List[float]):
         self.connections = list(mp.solutions.pose.POSE_CONNECTIONS)
 
-        landmarks = np.array(landmarks).reshape((33, 3))  # 33 pose landmarks
+        landmarks = np.array(landmarks).reshape((33, 2))    # ,3))  # 33 pose landmarks
         self.feature_vector = self._get_feature_vector(landmarks)
 
     def _get_feature_vector(self, landmarks: np.ndarray) -> List[float]:
@@ -37,7 +37,7 @@ class PoseModel(object):
         for a, b in self.connections:
             if np.any(landmarks[a] == -2) or np.any(landmarks[b] == -2):
                 # print(f"Skipping connection ({a}, {b}) due to missing landmark")
-                vectors.append(np.array([-2, -2, -2]))
+                vectors.append(np.array([-2, -2]))  # , -2]))  # Placeholder for missing
             else:
                 vectors.append(landmarks[b] - landmarks[a])
         return vectors
@@ -53,10 +53,10 @@ class PoseModel(object):
 
 if __name__ == "__main__":
     # TESTING ...
-    pose_landmarks = [f for f in range(100, 199)]  # 33 x 3 = 99
-    pose_landmarks[15] = -2  # x of landmark 6
-    pose_landmarks[16] = -2  # y of landmark 6
-    pose_landmarks[17] = -2  # z of landmark 6
+    pose_landmarks = [f for f in range(100, 166)]   # 199)]  # 33 x 3 = 99
+    pose_landmarks[10] = -2  # x of landmark 6
+    pose_landmarks[11] = -2  # y of landmark 6
+    # pose_landmarks[17] = -2  # z of landmark 6
     print(pose_landmarks)
 
     poseModel = PoseModel(landmarks=pose_landmarks)

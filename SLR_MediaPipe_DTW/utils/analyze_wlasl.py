@@ -1,3 +1,4 @@
+
 import json
 from collections import defaultdict
 import os
@@ -20,7 +21,7 @@ def get_train_val_test_split_per_gloss(json_path, n_glosses, plot=False):
     for gloss_entry in selected_glosses:
         gloss_name = gloss_entry['gloss']
         for instance in gloss_entry['instances']:
-            split = instance.get('split', 'train')  # default to 'train'
+            split = instance.get('split')
             if split in gloss_split_counts[gloss_name]:
                 gloss_split_counts[gloss_name][split] += 1
                 gloss_video_ids[gloss_name][split].append(instance['video_id'])

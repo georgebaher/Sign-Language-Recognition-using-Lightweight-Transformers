@@ -108,7 +108,7 @@ def get_default_args():
     return parser
 
 
-def fix_randomisation():
+def fix_randomisation(args):
     # Set all random seeds for reproducibility
     random.seed(args.seed)
     np.random.seed(args.seed)
@@ -129,7 +129,7 @@ def train(args):
 
     ##########  Initialize all the random seeds and set device ############
     # init seeds
-    fix_randomisation()
+    fix_randomisation(args)
     # set device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f'[INFO] Running using {device} on <{torch.cuda.get_device_name(0)}>')
@@ -410,6 +410,10 @@ def train(args):
         logging.info(" - Elapsed Time training (seconds): " + str(elapsed_time))
         logging.info("- Experiment Args: " + str(experiment_args))
 
+    if args.plot_stats or args.plot_lr:
+        plot_dir = os.path.join("out-img", experiment_name)
+        os.makedirs(plot_dir, exist_ok=True)
+
     # PLOT 0: Performance (loss, accuracies) chart plotting
     if args.plot_stats:
         fig, ax = plt.subplots()
@@ -427,7 +431,7 @@ def train(args):
                    fontsize="xx-small")
         ax.grid()
 
-        fig.savefig("out-img/experiment_name/" + "_loss.png")
+        fig.savefig(os.path.join(plot_dir, "loss.png"))
 
     # PLOT 1: Learning rate progress
     if args.plot_lr:
@@ -436,12 +440,10 @@ def train(args):
         ax1.set(xlabel="Epoch", ylabel="LR", title="")
         ax1.grid()
 
-        fig1.savefig("out-img/experiment_name/" + "_lr.png")
+        fig1.savefig(os.path.join(plot_dir, "lr.png"))
 
     print("\nAny desired statistics have been plotted.\nThe experiment is finished.")
     logging.info("\nAny desired statistics have been plotted.\nThe experiment is finished.")
-    print("\nThe experiment is finished.")
-    logging.info("The experiment is finished.")
 
     # Return highest accuracy
     return top_result
@@ -449,52 +451,5 @@ def train(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser("", parents=[get_default_args()], add_help=False)
-    base_args = parser.parse_args()
-
-    all_features = [
-        "HAND_LANDMARKS",
-        "POSE_LANDMARKS",
-        "HAND_POSE_LANDMARKS",
-        "HAND_ANGLES",
-        "POSE_ANGLES",
-        "HAND_POSE_ANGLES"
-    ]
-    all_fs = [0, 1]  # No feature selection, then with FS
-    hidden_dims = [(88, 88), (56, 48), (136, 104), (424, 320), (304, 232), (720, 520)]    # manually calculated with n_heads=8
-    results = []
-
-    for i, feature in enumerate(all_features):
-        for j, fs in enumerate(all_fs):
-            args = argparse.Namespace(**vars(base_args))  # deep copy base args
-            args.features = feature
-            args.fs = fs
-            args.experiment_name = f"{feature.lower()}_fs{fs}"
-            args.dataset_name = "WLASL100"
-            args.n_heads = 8
-            args.pe = 0
-            args.optimizer = "SGD"
-            args.sgd_momentum = 0.9
-            args.lr = 1e-3
-            args.epochs = 100
-            args.batch_size = 32
-            args.hidden_dim = hidden_dims[i][j]
-            args.scheduler_type = "cosine"
-
-            print(f"\n[INFO] Running experiment: {args.experiment_name}")
-            top_acc = train(args)
-            results.append({
-                "feature": feature,
-                "fs": fs,
-                "top_acc": top_acc
-            })
-
-    # Save results to a text file
-    results_path = "out-logs/experiment_results.txt"
-    with open(results_path, "w") as f:
-        f.write("==== EXPERIMENT COMPARISON ====\n")
-        f.write("{:<25} {:<5} {:<10}\n".format("Feature", "FS", "Top Accuracy"))
-        f.write("-" * 45 + "\n")
-        for res in results:
-            f.write("{:<25} {:<5} {:.2f}\n".format(res["feature"], res["fs"], res["top_acc"] * 100))
-
-    print(f"\n[INFO] Saved experiment results to {results_path}")
+    args = parser.parse_args()
+    train(args)

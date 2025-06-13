@@ -75,7 +75,7 @@ def export_minimal_csv(json_path, n_glosses, csv_path,
                     'fps': -1,
                     'frame_start': -1,
                     'frame_end': -1,
-                    'source': 'WLASL',
+                    'source': 'WLASL100',
                     'url': '-1',
                     'original_idx': -1
                 })

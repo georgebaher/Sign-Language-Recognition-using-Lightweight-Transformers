@@ -14,7 +14,7 @@ class HandModel(object):
 
     def __init__(self, landmarks: List[float]):
         self.connections = list(mp.solutions.holistic.HAND_CONNECTIONS)
-        landmarks = np.array(landmarks).reshape((21, 3))
+        landmarks = np.array(landmarks).reshape((21, 2))    # 3))
         self.feature_vector = self._get_feature_vector(landmarks)
 
     def _get_feature_vector(self, landmarks: np.ndarray) -> List[float]:
@@ -38,7 +38,7 @@ class HandModel(object):
         for a, b in self.connections:
             if np.any(landmarks[a] == -2) or np.any(landmarks[b] == -2):
                 # print(f"Skipping connection ({a}, {b}) due to missing landmark")
-                vectors.append(np.array([-2, -2, -2]))  # Placeholder for missing
+                vectors.append(np.array([-2, -2]))  # , -2]))  # Placeholder for missing
             else:
                 vectors.append(landmarks[b] - landmarks[a])
         return vectors
@@ -54,10 +54,10 @@ class HandModel(object):
 
 if __name__ == "__main__":
     # TESTING ...
-    test_landmarks = [i for i in range(63)]
-    test_landmarks[6] = -2  # corrupt landmark 3 (x)
-    test_landmarks[7] = -2  # corrupt landmark 3 (y)
-    test_landmarks[8] = -2  # corrupt landmark 3 (z)
+    test_landmarks = [i for i in range(42)]     # 63)]
+    test_landmarks[6] = -2  # corrupt landmark 4 (x)
+    test_landmarks[7] = -2  # corrupt landmark 4 (y)
+    # test_landmarks[8] = -2  # corrupt landmark 3 (z)
     print(test_landmarks)
     handModel = HandModel(landmarks=test_landmarks)
     print(f"# of connections: {len(handModel.connections)}")
