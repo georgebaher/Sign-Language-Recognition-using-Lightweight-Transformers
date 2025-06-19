@@ -28,6 +28,9 @@ from src.utils.args_utils import *
 from src.Training.trainingUtils.utils import train_epoch_batch, evaluate_batch
 from src.Training.dataloader.dataloader import WLASLParquetDataset
 from src.Training.models.BaselineTransformerClassification import BaselineTransformerClassification
+from src.Training.models.SPOTER import SPOTERTransformer
+from src.Training.models.LSTM import LSTMClassifier
+from src.Training.models.EncoderOnlyTransformer import SPOTEREncoderOnly
 
 
 def get_default_args():
@@ -39,14 +42,16 @@ def get_default_args():
                         help="Hidden dimension of the underlying Transformer model")
     parser.add_argument("--n_heads", type=int, default=9,
                         help="Hidden dimension of the underlying Transformer model")
+    parser.add_argument("--n_layers", type=int, default=1,
+                        help="Number of layers for model")
     parser.add_argument("--seed", type=int, default=379,
                         help="Seed with which to initialize all the random components of the training")
     parser.add_argument("--clip_weights", type=int, default=0, help="Clip weights during training")
     parser.add_argument("--clip_gradients", type=int, default=0, help="Clip gradients during training")
     parser.add_argument("--model2use", type=str,
-                        choices=["baselineTransformer"],
-                        default="baselineTransformer",
-                        help='Type of model to select for the training. choices=["baselineTransformer"]')
+                        choices=["baseline_transformer", "spoter", "lstm", "encoder"],
+                        default="baseline_transformer",
+                        help='Type of model to select for the training. choices=["baselineTransformer", "spoter", "lstm", "encoder"]')
     parser.add_argument("--pe", type=int, default=1,
                         help="Determines whether positional encoding is used or not")
     parser.add_argument("--optimizer", type=str,
@@ -155,6 +160,7 @@ def train(args):
     pe = args.pe
     epochs = args.epochs
     lr = args.lr
+    n_layers = args.n_layers
     log_freq = args.log_freq
     save_checkpoints = args.save_checkpoints
     experiment_args = ", ".join([
@@ -166,6 +172,7 @@ def train(args):
         f"mediapipe_holistic={True if mediapipe_holistic else False}",
         f"dim={hidden_dim}",
         f"heads={n_heads}",
+        f"n_layers={n_layers}",
         f"PE={pe}",
         f"pad={padding}",
         f"clip_weights={clip_weights}",
@@ -201,10 +208,33 @@ def train(args):
 
     ##################### MODELS #########################
     # Construct the model
-    # FOR NOW, ONLY ONE MODEL
+    if model2use == 'baseline_transformer':
+        model = BaselineTransformerClassification(num_classes=num_classes, hidden_dim=hidden_dim,
+                                                  n_heads=n_heads, w_pe=pe)
+    elif model2use == 'spoter':
+        model = SPOTERTransformer(
+            num_classes=num_classes,
+            hidden_dim=hidden_dim,
+            n_heads=n_heads,
+            w_pe=pe
+        )
+    elif model2use == 'lstm':
+        model = LSTMClassifier(
+            input_dim=hidden_dim,  # assuming your input features == hidden_dim
+            hidden_dim=hidden_dim,
+            num_classes=num_classes,
+            num_layers=n_layers
+        )
+    elif model2use == 'encoder':
+        model = SPOTEREncoderOnly(
+            num_classes=num_classes,
+            hidden_dim=hidden_dim,
+            n_heads=n_heads,
+            w_pe=pe
+        )
+    else:
+        raise ValueError(f"Unrecognized model2use: {model2use}")
 
-    model = BaselineTransformerClassification(num_classes=num_classes, hidden_dim=hidden_dim,
-                                              n_heads=n_heads, w_pe=pe)
     model.train(True)
     model.to(device)  # moves model to cpu or gpu if available
 
@@ -244,7 +274,6 @@ def train(args):
                                         transform=transform,
                                         features=features,
                                         fs=fs,
-                                        n_heads=n_heads
                                         )
         print(f"       loaded train dataset with {len(train_set)} samples, {len(train_set.gloss2idx)} classes and shape {train_set.__getitem__(0)[0].shape}")
 
@@ -255,7 +284,6 @@ def train(args):
                                       transform=transform,
                                       features=features,
                                       fs=fs,
-                                      n_heads=n_heads
                                       )
         print(
             f"       loaded val dataset with {len(val_set)} samples, {len(val_set.gloss2idx)} classes and shape {val_set.__getitem__(0)[0].shape}")
@@ -267,7 +295,6 @@ def train(args):
                                        transform=transform,
                                        features=features,
                                        fs=fs,
-                                       n_heads=n_heads
                                        )
         print(
             f"       loaded test dataset with {len(test_set)} samples, {len(test_set.gloss2idx)} classes and shape {test_set.__getitem__(0)[0].shape}")
@@ -290,20 +317,22 @@ def train(args):
         optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-3)
 
     # Setup scheduler for warmup
-    total_steps = len(train_loader) * args.epochs
-    warmup_steps = int(0.1 * total_steps)  # 10% warm-up
+    steps_per_epoch = len(train_loader)
+    total_steps = steps_per_epoch * args.epochs
+    extended_steps = steps_per_epoch * args.epochs * 2  # decay to zero after double the training steps
+    warmup_steps = int(0.1 * total_steps)  # warm up over 10% of original training duration
 
     if scheduler_type == "cosine":
         scheduler = get_cosine_schedule_with_warmup(
             optimizer,
             num_warmup_steps=warmup_steps,
-            num_training_steps=total_steps
+            num_training_steps=extended_steps  # total decay over 2x epochs
         )
     elif scheduler_type == "linear":
         scheduler = get_linear_schedule_with_warmup(
             optimizer,
             num_warmup_steps=warmup_steps,
-            num_training_steps=total_steps
+            num_training_steps=extended_steps
         )
     elif scheduler_type == "constant":
         scheduler = get_constant_schedule_with_warmup(

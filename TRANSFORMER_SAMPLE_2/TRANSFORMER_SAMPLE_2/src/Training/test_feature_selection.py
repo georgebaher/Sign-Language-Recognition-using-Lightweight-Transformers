@@ -47,7 +47,7 @@ if __name__ == '__main__':
             })
 
     # Save results to a text file
-    results_path = "out-logs/fs_experiment/fs_experiment_results.txt"
+    results_path = "out-logs/fs_experiment_results.txt"
     with open(results_path, "w") as f:
         f.write("==== EXPERIMENT COMPARISON ====\n")
         f.write("{:<25} {:<5} {:<10}\n".format("Feature", "FS", "Top Accuracy"))

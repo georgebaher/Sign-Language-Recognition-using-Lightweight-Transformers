@@ -13,18 +13,18 @@ if __name__ == '__main__':
     base_args.optimizer = "SGD"
     base_args.sgd_momentum = 0.9
     base_args.lr = 1e-3
-    base_args.epochs = 100
+    base_args.epochs = 150
     base_args.batch_size = 32
     base_args.dataset_name = "WLASL100"
-    base_args.scheduler_type = "constant"
+    base_args.scheduler_type = "cosine"
 
     all_features = [
         "HAND_LANDMARKS",
-        "POSE_LANDMARKS",
-        "HAND_POSE_LANDMARKS",
-        "HAND_ANGLES",
-        "POSE_ANGLES",
-        "HAND_POSE_ANGLES"
+        # "POSE_LANDMARKS",
+        # "HAND_POSE_LANDMARKS",
+        # "HAND_ANGLES",
+        # "POSE_ANGLES",
+        # "HAND_POSE_ANGLES"
     ]
     hidden_dims = [
         (88, 88), (56, 48), (136, 104),

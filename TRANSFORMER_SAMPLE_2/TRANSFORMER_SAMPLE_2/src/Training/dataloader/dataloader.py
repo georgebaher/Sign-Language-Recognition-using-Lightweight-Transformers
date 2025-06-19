@@ -1,3 +1,9 @@
+import sys
+sys.path.append('.')
+sys.path.append('..')
+sys.path.append('../../')
+sys.path.append('../../../')
+sys.path.append('../../../../')
 import torch
 from torch.utils.data import Dataset
 import pandas as pd
@@ -12,8 +18,7 @@ from Feature_Processing.feature_selection.features.pose_angles_features import T
 
 class WLASLParquetDataset(Dataset):
     def __init__(self, parquet_path, metadata_json_path, split="train",
-                 transform=None, max_len=None, features='hand_pose_landmarks', fs=0,
-                 n_heads=8):
+                 transform=None, max_len=None, features='hand_pose_landmarks', fs=0):
         if parquet_path is None:
             raise ValueError("parquet_path cannot be None")
         if metadata_json_path is None:
@@ -24,7 +29,6 @@ class WLASLParquetDataset(Dataset):
         self.max_len = max_len  # depends on features chosen
         self.features = features.lower()  # select features to take
         self.fs = fs  # use feature selection or not
-        self.n_heads = n_heads
 
         # Load metadata and filter by split
         with open(metadata_json_path, "r") as f:
@@ -149,18 +153,6 @@ class WLASLParquetDataset(Dataset):
         # if self.transform:
         #     feature_tensor = self.transform(feature_tensor)
 
-        # Pad feature dimension to be divisible by number of heads
-        if self.n_heads is not None and feature_tensor.shape[1] % self.n_heads != 0:
-            feat_dim = feature_tensor.shape[1]
-            target_dim = ((feat_dim + self.n_heads - 1) // self.n_heads) * self.n_heads
-            pad_width = target_dim - feat_dim
-            pad_column = torch.full((feature_tensor.shape[0], pad_width), fill_value=-2.0)
-            feature_tensor = torch.cat([feature_tensor, pad_column], dim=1)
-
-        # Pad feature dimension to even number if it's odd (for Positional Encoding)
-        if feature_tensor.shape[1] % 2 != 0:
-            pad_column = torch.full((feature_tensor.shape[0], 1), fill_value=-2.0)
-            feature_tensor = torch.cat([feature_tensor, pad_column], dim=1)
 
         # Pad to max_len
         if self.max_len:

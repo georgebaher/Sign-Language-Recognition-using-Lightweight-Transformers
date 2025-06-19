@@ -40,7 +40,6 @@ for feature in all_features:
             split="train",
             features=feature,
             fs=fs,
-            n_heads=8
         )
         dataloader = DataLoader(dataset, batch_size=1, shuffle=True)
         x, y = next(iter(dataloader))

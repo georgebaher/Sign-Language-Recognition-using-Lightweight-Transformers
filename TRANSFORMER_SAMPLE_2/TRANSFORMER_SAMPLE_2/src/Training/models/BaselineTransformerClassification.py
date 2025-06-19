@@ -5,29 +5,24 @@ import torch.nn as nn
 
 
 class PositionalEncodingSinCos(nn.Module):
-
     def __init__(self, d_model: int, dropout: float = 0.1, max_len: int = 5000, w_pe=True):
         super().__init__()
         self.dropout = nn.Dropout(p=dropout)
         self.w_pe = w_pe
 
-        position = torch.arange(max_len).unsqueeze(1)
+        position = torch.arange(max_len).unsqueeze(1)  # [max_len, 1]
         div_term = torch.exp(torch.arange(0, d_model, 2) * (-math.log(10000.0) / d_model))
-        pe = torch.zeros(max_len, 1, d_model)
-        pe[:, 0, 0::2] = torch.sin(position * div_term)
-        pe[:, 0, 1::2] = torch.cos(position * div_term)
+        pe = torch.zeros(max_len, d_model)  # [max_len, d_model]
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+        pe = pe.unsqueeze(0)  # [1, max_len, d_model] for batch_first
         self.register_buffer('pe', pe)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Args:
-            x: Tensor, shape [seq_len, batch_size, embedding_dim]
-        """
-        posEnc = self.pe[:x.size(0)]
         if not self.w_pe:
             return x
-        xAndPosEnc = x + posEnc
-        return self.dropout(xAndPosEnc)
+        x = x + self.pe[:, :x.size(1)]  # match [B, T, D]
+        return self.dropout(x)
 
 
 class BaselineTransformerClassification(nn.Module):
@@ -36,7 +31,7 @@ class BaselineTransformerClassification(nn.Module):
     of skeletal data.
     """
 
-    def __init__(self, num_classes, hidden_dim=55, n_heads=9, max_seq_len=50, w_pe=True):
+    def __init__(self, num_classes, hidden_dim=55, n_heads=9, max_seq_len=500, w_pe=True):
         print(f"[INFO] Initializing Baseline Transformer with {n_heads} heads and {hidden_dim} hidden_dim.")
         super().__init__()
 
@@ -70,8 +65,8 @@ class BaselineTransformerClassification(nn.Module):
 
 
         # Temporal average pooling
-        pooled = torch.mean(h, dim=1)  # [B, 1, D] and automatically the 1 us squeezed out, so it becomes [B, D]
+        pooled = torch.mean(h, dim=1)  # [B, 1, D] and automatically the 1 is squeezed out, so it becomes [B, D]
         # print(f"Pooled representations {pooled.shape}:", pooled)
 
-        res = self.linear_class(pooled)
+        res = self.linear_class(pooled)  # [B, n_classes]
         return res
