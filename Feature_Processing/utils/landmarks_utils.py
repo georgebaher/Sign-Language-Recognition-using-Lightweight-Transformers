@@ -81,7 +81,7 @@ if __name__ == "__main__":
     # Test landmarks extraction
     landmarks_df, vis_path = compute_video_landmarks(test_video_path, "drink", True)
     print("✅ Extracted landmarks. Shape of dataframe:", landmarks_df.shape)
-
+    print(landmarks_df.head())
     # Test returned visualization path
     if vis_path and os.path.exists(vis_path):
         print(f"✅ Landmarked video saved at: {vis_path}")

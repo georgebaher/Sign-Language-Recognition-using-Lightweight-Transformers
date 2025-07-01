@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
 # from SLR_MediaPipe_DTW.feature_selection.features.hand_pose_angles_features import TOP_ANGLE_BASES
-from Feature_Extraction.feature_selection.features.hand_angles_features import TOP_ANGLE_BASES
+from Feature_Processing.feature_selection.features.hand_angles_features import TOP_ANGLE_BASES
 from Mediapipe_holistic.processing.landmarks_utils import compute_video_landmarks
 from Mediapipe_holistic.processing.hand_angles_utils import compute_hand_angles
 from Mediapipe_holistic.processing.pose_angles_utils import compute_pose_angles

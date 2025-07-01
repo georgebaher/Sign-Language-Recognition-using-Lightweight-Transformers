@@ -159,22 +159,13 @@ class HolisticProcessor:
 
         frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         video_id = os.path.basename(video_path)
-        # window_name = f"{video_id}"
-
-        # if show_landmarks:
-        #     cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
-        #     cv2.resizeWindow(window_name, *self.window_size)
-        #     cv2.moveWindow(window_name, 0, 0)
-
-
         # fourcc = cv2.VideoWriter_fourcc(*'mp4v')
         fourcc = cv2.VideoWriter_fourcc(*'avc1')  # H.264
         video_output_path = None
         if show_landmarks:
-            temp_dir = os.getenv("TMP_DIR", "tmp")
+            temp_dir = os.getenv("LANDMARKS_TMP_DIR", "landmarks_tmp")
             os.makedirs(temp_dir, exist_ok=True)
             video_output_path = os.path.join(temp_dir, f"{video_id}_landmarked.mp4")
-            # fps = cap.get(cv2.CAP_PROP_FPS)
             fps = cap.get(cv2.CAP_PROP_FPS)
             if fps == 0 or np.isnan(fps):
                 fps = 25  # default fallback
@@ -201,11 +192,6 @@ class HolisticProcessor:
                 if frame_features.size:
                     frames_data.append(frame_features.flatten())
 
-                # if show_landmarks:
-                #     continue_loop = self._draw_landmarks(window_name, image_rgb, results)
-                #     if not continue_loop:
-                #         break
-
                 if show_landmarks:
                     frame_bgr = cv2.cvtColor(image_rgb, cv2.COLOR_RGB2BGR)
                     if results.pose_landmarks and "pose" in self.extract:
@@ -228,10 +214,6 @@ class HolisticProcessor:
                 pbar.update(1)
 
         cap.release()
-
-
-        # if show_landmarks:
-        #     cv2.destroyWindow(window_name)
 
         if show_landmarks:
             out.release()
