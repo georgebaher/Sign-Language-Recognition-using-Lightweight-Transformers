@@ -9,7 +9,7 @@ import time
 import pandas as pd
 from dotenv import load_dotenv
 from tqdm import tqdm
-from Feature_Processing.utils.facial_blendshapes_utils import compute_video_facial_landmarks
+from Feature_Processing.utils.facial_blendshapes_utils import compute_video_facial_blendshapes
 from Feature_Processing.utils.io_utils import load_existing_ids, save_and_merge
 
 
@@ -23,14 +23,14 @@ metadata_path = os.getenv("WLASL_METADATA_PATH")
 videos_folder_path = os.getenv("WLASL_VIDEOS_PATH")
 
 # data output path
-landmark_parquet_path = os.getenv("WLASL100_FACIAL_BLENDSHAPES_PATH")
+blendshapes_path = os.getenv("WLASL100_FACIAL_BLENDSHAPES_PATH")
 
 # Load wlasl_csv_exports
 with open(metadata_path, 'r') as f:
     glosses = json.load(f)[:100]
 
 # Load existing processed IDs
-processed_ids, existing_df = load_existing_ids(landmark_parquet_path)
+processed_ids, existing_df = load_existing_ids(blendshapes_path)
 print(f"✅ {len(processed_ids)} videos already processed. Skipping those.")
 
 # Track results
@@ -54,7 +54,7 @@ for gloss in tqdm(glosses, desc="Glosses", unit="gloss", colour='green'):
             missing_videos.append(video_id)
             continue
 
-        df, _, failed = compute_video_facial_landmarks(video_path, gloss_label)
+        df, _, failed = compute_video_facial_blendshapes(video_path, gloss_label)
         all_new_frames.append(df)
         new_videos_processed.append(video_id)
 
@@ -64,7 +64,11 @@ for gloss in tqdm(glosses, desc="Glosses", unit="gloss", colour='green'):
 # Save new data
 if all_new_frames:
     final_df = pd.concat(all_new_frames, ignore_index=True)
-    save_and_merge(final_df, landmark_parquet_path, existing_df)
+
+    # replace NaN with -2 for consistency as for example "tongueOut" can be NaN
+    final_df = final_df.fillna(-2)
+
+    save_and_merge(final_df, blendshapes_path, existing_df)
 else:
     print("⚠️ No new data to save.")
 
