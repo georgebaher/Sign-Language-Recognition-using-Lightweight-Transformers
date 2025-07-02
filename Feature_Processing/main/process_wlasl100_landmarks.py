@@ -64,11 +64,11 @@ else:
 
 # Save logs
 if missing_videos:
-    with open("missing_videos.txt", "w") as f:
+    with open("missing_landmarks_videos.txt", "w") as f:
         f.writelines([vid + "\n" for vid in missing_videos])
 
 if failed_videos:
-    with open("failed_videos.txt", "w") as f:
+    with open("failed_landmarks_videos.txt", "w") as f:
         f.writelines([vid + "\n" for vid in failed_videos])
 
 # Summary

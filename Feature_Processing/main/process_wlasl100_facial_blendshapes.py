@@ -1,4 +1,9 @@
 import os
+import sys
+sys.path.append('.')
+sys.path.append('..')
+sys.path.append('../../')
+sys.path.append('../../../')
 import json
 import time
 import pandas as pd
@@ -6,6 +11,8 @@ from dotenv import load_dotenv
 from tqdm import tqdm
 from Feature_Processing.utils.facial_blendshapes_utils import compute_video_facial_landmarks
 from Feature_Processing.utils.io_utils import load_existing_ids, save_and_merge
+
+
 
 # Start timer
 start = time.time()
@@ -47,13 +54,12 @@ for gloss in tqdm(glosses, desc="Glosses", unit="gloss", colour='green'):
             missing_videos.append(video_id)
             continue
 
-        df, _ = compute_video_facial_landmarks(video_path, gloss_label)
-        if df.empty:
-            failed_videos.append(video_id)
-            continue
-
+        df, _, failed = compute_video_facial_landmarks(video_path, gloss_label)
         all_new_frames.append(df)
         new_videos_processed.append(video_id)
+
+        if failed:
+            failed_videos.append(video_id)
 
 # Save new data
 if all_new_frames:
@@ -64,11 +70,11 @@ else:
 
 # Save logs
 if missing_videos:
-    with open("missing_videos.txt", "w") as f:
+    with open("missing_blendshapes_videos.txt", "w") as f:
         f.writelines([vid + "\n" for vid in missing_videos])
 
 if failed_videos:
-    with open("failed_videos.txt", "w") as f:
+    with open("failed_blendshapes_videos.txt", "w") as f:
         f.writelines([vid + "\n" for vid in failed_videos])
 
 # Summary
