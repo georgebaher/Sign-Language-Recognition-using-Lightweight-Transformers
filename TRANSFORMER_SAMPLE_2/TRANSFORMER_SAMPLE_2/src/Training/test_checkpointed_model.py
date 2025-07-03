@@ -64,13 +64,13 @@ def load_test_data(args):
     parquet_path = os.getenv(parquet_env_var)
     metadata_path = os.getenv("WLASL_METADATA_PATH")
 
-    return WLASLParquetDataset(parquet_path=parquet_path,
+    return WLASLParquetDataset(body_features_parquet_path=parquet_path,
                                metadata_json_path=metadata_path,
                                split='test',
                                transform=args.transform,
                                features=args.features,
                                fs=args.fs,
-                              )
+                               )
 
 
 def count_params(model):

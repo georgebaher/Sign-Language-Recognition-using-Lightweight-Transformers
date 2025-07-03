@@ -10,24 +10,28 @@ import pandas as pd
 import json
 import numpy as np
 from Feature_Processing.feature_selection.features.hand_angles_features import TOP_ANGLE_BASES as hand_angles
-from Feature_Processing.feature_selection.features.hand_pose_angles_features import TOP_ANGLE_BASES as hand_pose_angles
+# from Feature_Processing.feature_selection.features.hand_pose_angles_features import TOP_ANGLE_BASES as hand_pose_angles
 from Feature_Processing.feature_selection.features.hand_landmarks_features import TOP_LANDMARKS_BASES as hand_landmarks
-from Feature_Processing.feature_selection.features.hand_pose_landmarks_features import TOP_LANDMARKS_BASES as hand_pose_landmarks
+# from Feature_Processing.feature_selection.features.hand_pose_landmarks_features import TOP_LANDMARKS_BASES as hand_pose_landmarks
 from Feature_Processing.feature_selection.features.pose_landmarks_features import TOP_LANDMARKS_BASES as pose_landmarks
 from Feature_Processing.feature_selection.features.pose_angles_features import TOP_ANGLE_BASES as pose_angles
 
 class WLASLParquetDataset(Dataset):
-    def __init__(self, parquet_path, metadata_json_path, split="train",
-                 transform=None, max_len=None, features='hand_pose_landmarks', fs=0):
-        if parquet_path is None:
+    def __init__(self, body_features_parquet_path, facial_blendshapes_parquet_path=None, metadata_json_path=None, split="train",
+                 transform=None, max_len=None, features='hand_pose_landmarks', include_blendshapes=False, fs=0):
+        if body_features_parquet_path is None:
             raise ValueError("parquet_path cannot be None")
         if metadata_json_path is None:
             raise ValueError("metadata_json_path cannot be None")
-        self.df = pd.read_parquet(parquet_path)  # landmarks or angles
+        if include_blendshapes and facial_blendshapes_parquet_path is not None:
+            self.facial_blendshapes_df = pd.read_parquet(facial_blendshapes_parquet_path)
+            self.facial_map = self.facial_blendshapes_df.groupby("video_id")
+        self.body_features_df = pd.read_parquet(body_features_parquet_path)  # landmarks or angles
         self.transform = transform
         self.split = split
         self.max_len = max_len  # depends on features chosen
         self.features = features.lower()  # select features to take
+        self.include_blendshapes = include_blendshapes  # choose whether to include facial blendshapes
         self.fs = fs  # use feature selection or not
 
         # Load metadata and filter by split
@@ -59,13 +63,13 @@ class WLASLParquetDataset(Dataset):
         # Filter feature DataFrame by available video_ids to get train/val/test instances
         video_ids = [entry["video_id"] for entry in self.instances]
         # Filter only valid video IDs
-        self.df = self.df[self.df["video_id"].astype(str).isin(video_ids)]
+        self.body_features_df = self.body_features_df[self.body_features_df["video_id"].astype(str).isin(video_ids)]
 
         # # TODO: Apply or not gaussian noise or other transformation
         # transform = transforms.Compose([GaussianNoise(args.gaussian_mean, args.gaussian_std)])
 
         # Group all rows by video_id → returns a GroupBy object
-        self.feature_map = self.df.groupby("video_id")
+        self.feature_map = self.body_features_df.groupby("video_id")
 
         # Find maximum sequence length (number of frames per video)
         self.video_lengths = self.feature_map.size()  # Series: video_id → count
@@ -99,13 +103,13 @@ class WLASLParquetDataset(Dataset):
             elif self.features == "pose_angles":
                 selected_features = pose_angles
             elif self.features == "hand_pose_angles":
-                selected_features = hand_pose_angles
+                selected_features = hand_angles + pose_angles
             elif self.features == "hand_landmarks":
                 selected_features = hand_landmarks
             elif self.features == "pose_landmarks":
                 selected_features = pose_landmarks
             elif self.features == "hand_pose_landmarks":
-                selected_features = hand_pose_landmarks
+                selected_features = hand_landmarks + pose_landmarks
             else:
                 raise ValueError(f"[ERROR] Unknown feature selection group: {self.features}")
             # Keep only the selected features
@@ -142,6 +146,15 @@ class WLASLParquetDataset(Dataset):
         # Drop z-axis if using landmarks
         if "landmarks" in self.features:
             features_df = features_df[[col for col in features_df.columns if not col.endswith('_z')]]
+
+        if self.include_blendshapes:
+            blend_group = self.facial_map.get_group(video_id)
+            blend_features_df = blend_group.drop(columns=["video_id", "gloss"], errors="ignore")
+            if len(features_df) != len(blend_features_df):
+                raise ValueError(
+                    f"Blendshapes frame count ({len(blend_features_df)}) != features frame count ({len(features_df)}) for video {video_id}")
+            blend_features_df = blend_features_df.reset_index(drop=True)
+            features_df = pd.concat([features_df.reset_index(drop=True), blend_features_df], axis=1)
 
         # Now convert to NumPy
         features = features_df.values.astype(np.float32)

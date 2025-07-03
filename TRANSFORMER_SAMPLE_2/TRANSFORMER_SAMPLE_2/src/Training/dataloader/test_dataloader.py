@@ -8,7 +8,8 @@ from dotenv import load_dotenv
 
 
 # ------------------ PLOT FUNCTION ------------------
-def plot_landmarks(feature_tensor: torch.Tensor, save_path="tmp/output.mp4", width=512, height=512, fps=25, axis_mode='xyz', drop_lower_body=0):
+def plot_landmarks(feature_tensor: torch.Tensor, save_path="tmp/output.mp4", width=512, height=512, fps=25,
+                   axis_mode='xy', drop_lower_body=1):
     """
     Render landmarks on a white background and save as video.
     Skips padded frames (-2) and padded landmarks (-2).
@@ -40,17 +41,13 @@ def plot_landmarks(feature_tensor: torch.Tensor, save_path="tmp/output.mp4", wid
     ###### Prepare landmarks ######
     seq_len, feature_dim = feature_tensor.shape
 
-    n_axis=3
+    n_axis = 3
     if axis_mode == 'xyz':
         pass
     elif axis_mode == 'xy':
-        n_axis=2
+        n_axis = 2
     else:
         raise ValueError(f'[ERROR] Axis mode {axis_mode} not supported')
-
-    # This condition is for checking if there was an extra padding column added in get_item() in dataloader to relax the positional encoding 'even d_model' requirement
-    if feature_dim % n_axis != 0:
-        feature_tensor = feature_tensor[:, :-1]
 
     features_np = feature_tensor.cpu().numpy().reshape(seq_len, -1, n_axis)
 
@@ -88,14 +85,9 @@ def plot_landmarks(feature_tensor: torch.Tensor, save_path="tmp/output.mp4", wid
 
         frame = np.zeros((height, width, 3), dtype=np.uint8) * 255  # black background
 
-        if not drop_lower_body:
-            pose = frame_data[:33]
-            left_hand = frame_data[33:54]
-            right_hand = frame_data[54:]
-        else:
-            pose = frame_data[:23]
-            left_hand = frame_data[23:44]
-            right_hand = frame_data[44:]
+        pose = frame_data[:25]
+        left_hand = frame_data[25:46]
+        right_hand = frame_data[46:57]
 
         draw_subset(frame, left_hand, HAND_CONNECTIONS, prefix="LH")
         draw_subset(frame, right_hand, HAND_CONNECTIONS, prefix="RH")
@@ -114,21 +106,30 @@ load_dotenv()
 
 def main():
     # Set your paths
-    parquet_path = os.getenv('WLASL100_HAND_POSE_LANDMARKS_PATH')
+    body_features_parquet_path = os.getenv('WLASL100_HAND_POSE_LANDMARKS_PATH')
+    facial_blendshapes_parquet_path = os.getenv('WLASL100_FACIAL_BLENDSHAPES_PATH')
     metadata_path = os.getenv("WLASL_METADATA_PATH")
 
     # Make sure files exist
-    assert os.path.exists(parquet_path), f"Missing: {parquet_path}"
+    assert os.path.exists(body_features_parquet_path), f"Missing: {body_features_parquet_path}"
+    assert os.path.exists(facial_blendshapes_parquet_path), f"Missing: {facial_blendshapes_parquet_path}"
     assert os.path.exists(metadata_path), f"Missing: {metadata_path}"
 
+    transform = None
+    features = "HAND_POSE_LANDMARKS"
+    include_blendshapes = True
+    fs = 0
+
     # Create dataset and loader
-    dataset = WLASLParquetDataset(
-        parquet_path=parquet_path,
-        metadata_json_path=metadata_path,
-        split="train",
-        axis_mode='xy',
-        ignore_lower_body=1,
-    )
+    dataset = WLASLParquetDataset(body_features_parquet_path=body_features_parquet_path,
+                                  facial_blendshapes_parquet_path=facial_blendshapes_parquet_path,
+                                  metadata_json_path=os.getenv('WLASL_METADATA_PATH'),
+                                  split='train',
+                                  transform=None,
+                                  features=features,
+                                  include_blendshapes=include_blendshapes,
+                                  fs=fs,
+                                  )
     print(f"[INFO] Loaded dataset with {len(dataset)} samples and {len(dataset.gloss2idx)} classes")
 
     dataloader = DataLoader(dataset, batch_size=32, shuffle=True)
@@ -143,8 +144,8 @@ def main():
 
         # Visualize the first sample from first batch
         for idx, feature_tensor in enumerate(features[:3]):
-            plot_landmarks(feature_tensor, f'tmp/{decoded_labels[idx][1]}_batch_{i}_idx_{idx}.mp4', axis_mode='xy', drop_lower_body=dataset.ignore_lower_body)
-
+            plot_landmarks(feature_tensor, f'tmp/{decoded_labels[idx][1]}_batch_{i}_idx_{idx}.mp4', axis_mode='xy',
+                           drop_lower_body=1)
         if i == 1:
             break
 

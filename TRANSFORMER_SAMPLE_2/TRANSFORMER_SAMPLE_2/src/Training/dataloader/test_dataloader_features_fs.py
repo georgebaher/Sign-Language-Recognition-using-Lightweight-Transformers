@@ -35,7 +35,7 @@ for feature in all_features:
 
     for fs in [0, 1]:
         dataset = WLASLParquetDataset(
-            parquet_path=parquet_path,
+            body_features_parquet_path=parquet_path,
             metadata_json_path=metadata_path,
             split="train",
             features=feature,

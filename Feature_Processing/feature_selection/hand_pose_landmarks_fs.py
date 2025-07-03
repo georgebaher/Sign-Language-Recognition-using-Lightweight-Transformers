@@ -73,20 +73,20 @@ feature_importance_pairs = sorted(
 )
 
 # Aggregate importances by base name
-angle_importance_total = defaultdict(float)
+feature_importance_total = defaultdict(float)
 
 for name, importance in feature_importance_pairs:
     base = name.rsplit("_", 1)[0]  # Remove metric (e.g., "_mean")
     base = base.rsplit("_", 1)[0]  # Remove x and y
-    angle_importance_total[base] += importance
+    feature_importance_total[base] += importance
 
-# Sort angle bases by total importance
-sorted_angle_importance = sorted(angle_importance_total.items(), key=lambda x: x[1], reverse=True)
+# Sort feature bases by total importance
+sorted_feature_importance = sorted(feature_importance_total.items(), key=lambda x: x[1], reverse=True)
 
-top_angle_bases = [angle for angle, _ in sorted_angle_importance]
-print(len(top_angle_bases))
+top_feature_bases = [feature for feature, _ in sorted_feature_importance]
+print(len(top_feature_bases))
 with open("features/hand_pose_landmarks_features.py", "w") as f:
     f.write("TOP_LANDMARKS_BASES = [\n")
-    for angle in top_angle_bases:
-        f.write(f'    "{angle}",\n')
+    for feature in top_feature_bases:
+        f.write(f'    "{feature}",\n')
     f.write("]\n")

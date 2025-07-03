@@ -12,7 +12,7 @@ from sklearn.feature_selection import SelectKBest, f_classif
 from sklearn.metrics import accuracy_score
 
 # Load summarized feature data
-df = pd.read_parquet(os.getenv('WLASL100_POSE_LANDMARKS_SUMMARY_PATH'))
+df = pd.read_parquet(os.getenv('WLASL100_FACIAL_BLENDSHAPES_SUMMARY_PATH'))
 
 # Load metadata
 with open(os.getenv("WLASL_METADATA_PATH")) as f:
@@ -43,9 +43,9 @@ original_feature_names = X.columns
 pipeline = Pipeline([
     ("imputer", SimpleImputer(missing_values=-2, strategy="mean")),
     ("scaler", StandardScaler()),
-    ("univariate", SelectKBest(score_func=f_classif, k=100)),
+    ("univariate", SelectKBest(score_func=f_classif, k="all")),
     ("classifier", RandomForestClassifier(
-        n_estimators=200,
+        n_estimators=300,
         max_features='sqrt',
         max_depth=None,
         random_state=42
@@ -77,7 +77,6 @@ feature_importance_total = defaultdict(float)
 
 for name, importance in feature_importance_pairs:
     base = name.rsplit("_", 1)[0]  # Remove metric (e.g., "_mean")
-    base = base.rsplit("_", 1)[0]  # Remove x and y
     feature_importance_total[base] += importance
 
 # Sort feature bases by total importance
@@ -85,8 +84,8 @@ sorted_feature_importance = sorted(feature_importance_total.items(), key=lambda 
 
 top_feature_bases = [feature for feature, _ in sorted_feature_importance]
 print(len(top_feature_bases))
-with open("features/pose_landmarks_features.py", "w") as f:
-    f.write("TOP_LANDMARKS_BASES = [\n")
+with open("features/facial_blendshapes_features.py", "w") as f:
+    f.write("TOP_BLENDSHAPES_BASES = [\n")
     for feature in top_feature_bases:
         f.write(f'    "{feature}",\n')
     f.write("]\n")

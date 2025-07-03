@@ -68,6 +68,8 @@ def get_default_args():
                         choices=["HAND_LANDMARKS", "POSE_LANDMARKS", "HAND_POSE_LANDMARKS", "HAND_ANGLES", "POSE_ANGLES", "HAND_POSE_ANGLES"],
                         default="HAND_POSE_LANDMARKS",
                         help='Features used. Choices=["HAND_LANDMARKS", "POSE_LANDMARKS", "HAND_POSE_LANDMARKS", "HAND_ANGLES", "POSE_ANGLES", "HAND_POSE_ANGLES"]')
+    parser.add_argument("--include_blendshapes", type=bool, default=False,
+                        help='choose whether to include facial blendshapes')
     parser.add_argument("--fs", type=int,
                         default=0,
                         help='Use feature selection')
@@ -156,6 +158,7 @@ def train(args):
     clip_gradients = args.clip_gradients
     transform = args.transform  # TODO: implement transformations (Not yet)
     features = args.features
+    include_blendshapes = args.include_blendshapes
     fs = args.fs
     pe = args.pe
     epochs = args.epochs
@@ -166,6 +169,7 @@ def train(args):
     experiment_args = ", ".join([
         f"dataset={dataset_name}",
         f"features={features}",
+        f"include_blendshapes={include_blendshapes}",
         f"fs={fs}",
         f"num_classes={num_classes}",
         f"model={model2use}",
@@ -258,42 +262,49 @@ def train(args):
             "HAND_POSE_ANGLES": "WLASL100_HAND_POSE_ANGLES_PATH",
         }
         # Resolve parquet path based on selected feature type
-        parquet_env_var = feature_parquet_map.get(features.upper())
-        if parquet_env_var is None:
+        body_features_parquet_env_var = feature_parquet_map.get(features.upper())
+        if body_features_parquet_env_var is None:
             raise ValueError(f"Unknown feature type: {features}")
-        parquet_path = os.getenv(parquet_env_var)
-        if parquet_path is None:
-            raise ValueError(f"Environment variable {parquet_env_var} is not set")
-
+        body_features_parquet_path = os.getenv(body_features_parquet_env_var)
+        if body_features_parquet_path is None:
+            raise ValueError(f"Environment variable {body_features_parquet_env_var} is not set")
+        # Path for blendshapes
+        facial_blendshapes_parquet_path = os.getenv("WLASL100_FACIAL_BLENDSHAPES_PATH")
         print("[INFO] Processing WLASL100 dataset...")
 
         # Training set
-        train_set = WLASLParquetDataset(parquet_path=parquet_path,
+        train_set = WLASLParquetDataset(body_features_parquet_path=body_features_parquet_path,
+                                        facial_blendshapes_parquet_path=facial_blendshapes_parquet_path,
                                         metadata_json_path=os.getenv('WLASL_METADATA_PATH'),
                                         split='train',
                                         transform=transform,
                                         features=features,
+                                        include_blendshapes=include_blendshapes,
                                         fs=fs,
                                         )
         print(f"       loaded train dataset with {len(train_set)} samples, {len(train_set.gloss2idx)} classes and shape {train_set.__getitem__(0)[0].shape}")
 
         # Validation set
-        val_set = WLASLParquetDataset(parquet_path=parquet_path,
+        val_set = WLASLParquetDataset(body_features_parquet_path=body_features_parquet_path,
+                                      facial_blendshapes_parquet_path=facial_blendshapes_parquet_path,
                                       metadata_json_path=os.getenv('WLASL_METADATA_PATH'),
                                       split='val',
                                       transform=transform,
                                       features=features,
+                                      include_blendshapes=include_blendshapes,
                                       fs=fs,
                                       )
         print(
             f"       loaded val dataset with {len(val_set)} samples, {len(val_set.gloss2idx)} classes and shape {val_set.__getitem__(0)[0].shape}")
 
         # Test
-        test_set = WLASLParquetDataset(parquet_path=parquet_path,
+        test_set = WLASLParquetDataset(body_features_parquet_path=body_features_parquet_path,
+                                       facial_blendshapes_parquet_path=facial_blendshapes_parquet_path,
                                        metadata_json_path=os.getenv('WLASL_METADATA_PATH'),
                                        split='test',
                                        transform=transform,
                                        features=features,
+                                       include_blendshapes=include_blendshapes,
                                        fs=fs,
                                        )
         print(
