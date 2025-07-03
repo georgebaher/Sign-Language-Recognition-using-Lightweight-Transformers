@@ -38,7 +38,7 @@ def plot_landmarks(feature_tensor: torch.Tensor, save_path="tmp/output.mp4", wid
     writer = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (width, height))
 
     ###### Prepare landmarks ######
-    seq_len, feature_dim = feature_tensor.shape
+    seq_len, _ = feature_tensor.shape
 
     n_axis = 2  # x and y only
 
