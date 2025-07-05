@@ -153,5 +153,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     test(args)
     print("Done")
+
+
 #     python test_checkpointed_model.py --experiment_name encoder_hand_landmarks --hidden_dim 88  --model2use encoder  --optimizer adam --fs 0  --scheduler_type cosine --dataset_name WLASL100 --features HAND_LANDMARKS
 # --batch_size 32 --num_classes 100 --n_heads 8 --pe 0 --checkpoint_tag t --checkpoint_index 34

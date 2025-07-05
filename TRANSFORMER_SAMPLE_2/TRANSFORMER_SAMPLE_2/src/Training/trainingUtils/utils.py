@@ -113,10 +113,58 @@ def train_epoch_batch(model, dataloader, loss_fn, optimizer, device, scheduler=N
 
 
 
+# def evaluate_batch(model, loss_fn, dataloader, device, print_stats=False):
+#     pred_correct, pred_all = 0, 0
+#     stats = {i: [0, 0] for i in range(100)}  # Assuming 100 classes
+#     val_loss = 0.0
+#     for i, data in enumerate(dataloader):
+#         batch, labels = data
+#
+#         batch = batch.to(device)
+#         labels = labels.to(device, dtype=torch.long)
+#
+#         outputs = model(batch)
+#         outs_squeeze = outputs.squeeze(1)  # remove the temporal dimension
+#
+#         loss = loss_fn(outs_squeeze, labels)  # loss = criterion(outputs[0], labels[0])
+#         val_loss += loss.item()
+#
+#         # Statistics
+#         preds = torch.argmax(outs_squeeze, dim=1)  # [bs,1]
+#         # print('predictions:', preds)
+#         # print('labels:', labels)
+#         pred_correct_i, batch_stats = count_success(preds, labels, calc_stats=True)
+#
+#         # Accumulate stats
+#         for k in batch_stats:
+#             stats[k][0] += batch_stats[k][0]  # correct
+#             stats[k][1] += batch_stats[k][1]  # total
+#
+#         pred_correct += pred_correct_i
+#         pred_all += preds.shape[0]  # it should be equal to batch size
+#
+#     average_val_loss = val_loss / len(dataloader)
+#
+#     print(">>> Total Validation: ", str(pred_all))
+#     if print_stats:
+#         stats = {key: value[0] / value[1] for key, value in stats.items() if value[1] != 0}
+#         print("Validation accuracies statistics:")
+#         print(str(stats) + "\n")
+#         logging.info("Validation accuracies statistics:")
+#         logging.info(str(stats) + "\n")
+#
+#
+#     average_val_acc = pred_correct / pred_all
+#     return average_val_loss, average_val_acc, stats
+
 def evaluate_batch(model, loss_fn, dataloader, device, print_stats=False):
     pred_correct, pred_all = 0, 0
-    stats = {i: [0, 0] for i in range(100)}  # Assuming 100 classes
+    num_classes = 100  # adjust if needed
     val_loss = 0.0
+
+    # Track TP, FP, FN for each class
+    class_metrics = {i: {"TP": 0, "FP": 0, "FN": 0} for i in range(num_classes)}
+
     for i, data in enumerate(dataloader):
         batch, labels = data
 
@@ -124,39 +172,33 @@ def evaluate_batch(model, loss_fn, dataloader, device, print_stats=False):
         labels = labels.to(device, dtype=torch.long)
 
         outputs = model(batch)
-        outs_squeeze = outputs.squeeze(1)  # remove the temporal dimension
+        outs_squeeze = outputs.squeeze(1)
 
-        loss = loss_fn(outs_squeeze, labels)  # loss = criterion(outputs[0], labels[0])
+        loss = loss_fn(outs_squeeze, labels)
         val_loss += loss.item()
 
-        # Statistics
-        preds = torch.argmax(outs_squeeze, dim=1)  # [bs,1]
-        # print('predictions:', preds)
-        # print('labels:', labels)
-        pred_correct_i, batch_stats = count_success(preds, labels, calc_stats=True)
+        preds = torch.argmax(outs_squeeze, dim=1)
 
-        # Accumulate stats
-        for k in batch_stats:
-            stats[k][0] += batch_stats[k][0]  # correct
-            stats[k][1] += batch_stats[k][1]  # total
+        for true, pred in zip(labels.cpu().numpy(), preds.cpu().numpy()):
+            if true == pred:
+                class_metrics[true]["TP"] += 1
+            else:
+                class_metrics[true]["FN"] += 1
+                class_metrics[pred]["FP"] += 1
 
-        pred_correct += pred_correct_i
-        pred_all += preds.shape[0]  # it should be equal to batch size
+        pred_correct += torch.sum(preds == labels).item()
+        pred_all += labels.size(0)
 
     average_val_loss = val_loss / len(dataloader)
-
-    print(">>> Total Validation: ", str(pred_all))
-    if print_stats:
-        stats = {key: value[0] / value[1] for key, value in stats.items() if value[1] != 0}
-        print("Validation accuracies statistics:")
-        print(str(stats) + "\n")
-        logging.info("Validation accuracies statistics:")
-        logging.info(str(stats) + "\n")
-
-
     average_val_acc = pred_correct / pred_all
-    return average_val_loss, average_val_acc, stats
 
+    if print_stats:
+        print("Validation class-wise metrics:")
+        for k, v in class_metrics.items():
+            print(f"Class {k}: TP={v['TP']} FP={v['FP']} FN={v['FN']}")
+            logging.info(f"Class {k}: TP={v['TP']} FP={v['FP']} FN={v['FN']}")
+
+    return average_val_loss, average_val_acc, class_metrics
 
 
 def evaluate_batch_savePred(model, dataloader, device, save_path, print_stats=False, n_classes=100):

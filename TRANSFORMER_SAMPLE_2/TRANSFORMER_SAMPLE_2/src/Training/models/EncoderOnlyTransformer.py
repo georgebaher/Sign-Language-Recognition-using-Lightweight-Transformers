@@ -24,11 +24,11 @@ class SPOTEREncoderOnly(nn.Module):
     def __init__(self, num_classes, hidden_dim=256, n_heads=8, num_layers=6, dropout=0.1, max_len=500, w_pe=True):
         super().__init__()
         print(f"[INFO] Initializing SPOTEREncoderOnly with {n_heads} heads, hidden_dim={hidden_dim}")
-        self.w_pe = w_pe
+        self.hidden_dim = hidden_dim
         self.n_heads = n_heads
 
+        self.w_pe = w_pe
         self.sin_cos_pos_embedding = PositionalEncodingSinCos(hidden_dim, dropout, max_len, )
-
         self.learnable_pos_embedding = nn.Parameter(
             torch.randn(1, max_len, hidden_dim))  # learnable positional embedding
 
@@ -56,12 +56,12 @@ class SPOTEREncoderOnly(nn.Module):
         # Padding mask: True where padding
         pad_mask = (x == -2).all(dim=-1)  # [B, T]
 
+        # Pad feature dim to match n_heads
+        x = self.pad_to_heads(x)
+
         # Replace missing values with 0
         x = x.clone()
         x[x == -2] = 0.0
-
-        # Pad feature dim to match n_heads
-        x = self.pad_to_heads(x)
 
         # Positional encoding
         if self.w_pe:

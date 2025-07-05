@@ -4,6 +4,7 @@ import torch.nn as nn
 
 
 
+
 class PositionalEncodingSinCos(nn.Module):
     def __init__(self, d_model: int, dropout: float = 0.1, max_len: int = 5000, w_pe=True):
         super().__init__()
@@ -31,15 +32,25 @@ class BaselineTransformerClassification(nn.Module):
     of skeletal data.
     """
 
-    def __init__(self, num_classes, hidden_dim=55, n_heads=9, max_seq_len=500, w_pe=True):
+    def __init__(self, num_classes, hidden_dim=150, n_heads=10, max_seq_len=500, num_layers=6, dropout=0.0, w_pe=True):
         print(f"[INFO] Initializing Baseline Transformer with {n_heads} heads and {hidden_dim} hidden_dim.")
         super().__init__()
-
-        self.output_pos_encoding = PositionalEncodingSinCos(d_model=hidden_dim, dropout=0.0, w_pe=w_pe)
-
-        self.transformer = nn.Transformer(hidden_dim, n_heads, 6, 6, batch_first=True)
+        self.hidden_dim = hidden_dim
+        self.n_heads = n_heads
+        self.output_pos_encoding = PositionalEncodingSinCos(d_model=hidden_dim, dropout=dropout, w_pe=w_pe)
+        self.transformer = nn.Transformer(hidden_dim, n_heads, num_layers, num_layers, batch_first=True)
         self.linear_class = nn.Linear(hidden_dim, num_classes)
         print(f"[INFO] Transformer model initialized with {'no ' if not w_pe else ''}positional encoding")
+
+    def pad_to_heads(self, x: torch.Tensor) -> torch.Tensor:
+        """Pad the feature dimension to be divisible by number of heads."""
+        B, T, D = x.shape
+        if D % self.n_heads != 0:
+            target_dim = ((D + self.n_heads - 1) // self.n_heads) * self.n_heads
+            pad_width = target_dim - D
+            pad_tensor = torch.full((B, T, pad_width), fill_value=-2.0, device=x.device)
+            x = torch.cat([x, pad_tensor], dim=-1)
+        return x
 
     def forward(self, inputs):
         h = inputs.float()  # [B, T, D]
@@ -48,11 +59,14 @@ class BaselineTransformerClassification(nn.Module):
         # Create a mask where all features in a timestep are -2 → it's a padding frame
         src_key_padding_mask = (inputs == -2).all(dim=-1)  # shape: [batch_size, seq_len]
 
+        # Pad feature dim if needed
+        h = self.pad_to_heads(h)
+
         # Replace all -2 values (missing features) with 0
         h[h == -2] = 0.0
 
-        # Subtract 0.5 from all features
-        h = h - 0.5
+        # # Subtract 0.5 from all features
+        # h = h - 0.5
 
         # # 🔍 Check input variation per sample
         # print("Input mean:", h.mean(dim=[1, 2]))
@@ -62,7 +76,6 @@ class BaselineTransformerClassification(nn.Module):
         henc = self.output_pos_encoding(h)
 
         h = self.transformer(henc, henc, src_key_padding_mask=src_key_padding_mask)
-
 
         # Temporal average pooling
         pooled = torch.mean(h, dim=1)  # [B, 1, D] and automatically the 1 is squeezed out, so it becomes [B, D]

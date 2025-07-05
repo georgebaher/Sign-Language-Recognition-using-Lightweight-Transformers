@@ -68,10 +68,11 @@ class SPOTERTransformer(nn.Module):
         # x = x - 0.5
 
         if self.w_pe:
-            # # Sin-Cos Positional encoding
-            # x = self.sin_cos_pos_embedding(x)
-            # Learnable Positional encoding
-            x = x + self.learnable_pos_embedding[:, :T]
+            # Sin-Cos Positional encoding
+            x = self.sin_cos_pos_embedding(x)
+
+            # # Learnable Positional encoding
+            # x = x + self.learnable_pos_embedding[:, :T]
 
         # Encode sequence
         memory = self.encoder(x, src_key_padding_mask=pad_mask)

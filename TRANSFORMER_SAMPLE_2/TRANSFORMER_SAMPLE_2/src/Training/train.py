@@ -68,7 +68,7 @@ def get_default_args():
                         choices=["HAND_LANDMARKS", "POSE_LANDMARKS", "HAND_POSE_LANDMARKS", "HAND_ANGLES", "POSE_ANGLES", "HAND_POSE_ANGLES"],
                         default="HAND_POSE_LANDMARKS",
                         help='Features used. Choices=["HAND_LANDMARKS", "POSE_LANDMARKS", "HAND_POSE_LANDMARKS", "HAND_ANGLES", "POSE_ANGLES", "HAND_POSE_ANGLES"]')
-    parser.add_argument("--include_blendshapes", type=bool, default=False,
+    parser.add_argument("--include_blendshapes", type=int, default=0,
                         help='choose whether to include facial blendshapes')
     parser.add_argument("--fs", type=int,
                         default=0,
@@ -148,6 +148,7 @@ def train(args):
     padding = args.padding
     n_heads = args.n_heads
     hidden_dim = args.hidden_dim
+    n_layers = args.n_layers
     model2use = args.model2use
     batch_size = args.batch_size
     num_classes = args.num_classes
@@ -163,7 +164,6 @@ def train(args):
     pe = args.pe
     epochs = args.epochs
     lr = args.lr
-    n_layers = args.n_layers
     log_freq = args.log_freq
     save_checkpoints = args.save_checkpoints
     experiment_args = ", ".join([
@@ -213,12 +213,13 @@ def train(args):
     ##################### MODELS #########################
     # Construct the model
     if model2use == 'baseline_transformer':
-        model = BaselineTransformerClassification(num_classes=num_classes, hidden_dim=hidden_dim,
+        model = BaselineTransformerClassification(num_classes=num_classes, hidden_dim=hidden_dim, num_layers=n_layers,
                                                   n_heads=n_heads, w_pe=pe)
     elif model2use == 'spoter':
         model = SPOTERTransformer(
             num_classes=num_classes,
             hidden_dim=hidden_dim,
+            num_layers=n_layers,
             n_heads=n_heads,
             w_pe=pe
         )
@@ -227,12 +228,14 @@ def train(args):
             input_dim=hidden_dim,  # assuming your input features == hidden_dim
             hidden_dim=hidden_dim,
             num_classes=num_classes,
-            num_layers=n_layers
+            num_layers=n_layers,
+            n_heads=n_heads
         )
     elif model2use == 'encoder':
         model = SPOTEREncoderOnly(
             num_classes=num_classes,
             hidden_dim=hidden_dim,
+            num_layers=n_layers,
             n_heads=n_heads,
             w_pe=pe
         )
@@ -272,41 +275,22 @@ def train(args):
         facial_blendshapes_parquet_path = os.getenv("WLASL100_FACIAL_BLENDSHAPES_PATH")
         print("[INFO] Processing WLASL100 dataset...")
 
+        dataloader_args = {"body_features_parquet_path": body_features_parquet_path,
+                           "facial_blendshapes_parquet_path": facial_blendshapes_parquet_path,
+                           "metadata_json_path": os.getenv("WLASL_METADATA_PATH"), "transform": None,
+                           "features": features, "include_blendshapes": include_blendshapes, "fs": fs}
+
         # Training set
-        train_set = WLASLParquetDataset(body_features_parquet_path=body_features_parquet_path,
-                                        facial_blendshapes_parquet_path=facial_blendshapes_parquet_path,
-                                        metadata_json_path=os.getenv('WLASL_METADATA_PATH'),
-                                        split='train',
-                                        transform=transform,
-                                        features=features,
-                                        include_blendshapes=include_blendshapes,
-                                        fs=fs,
-                                        )
+        train_set = WLASLParquetDataset(**dataloader_args, split="train")
         print(f"       loaded train dataset with {len(train_set)} samples, {len(train_set.gloss2idx)} classes and shape {train_set.__getitem__(0)[0].shape}")
 
         # Validation set
-        val_set = WLASLParquetDataset(body_features_parquet_path=body_features_parquet_path,
-                                      facial_blendshapes_parquet_path=facial_blendshapes_parquet_path,
-                                      metadata_json_path=os.getenv('WLASL_METADATA_PATH'),
-                                      split='val',
-                                      transform=transform,
-                                      features=features,
-                                      include_blendshapes=include_blendshapes,
-                                      fs=fs,
-                                      )
+        val_set = WLASLParquetDataset(**dataloader_args, split="val")
         print(
             f"       loaded val dataset with {len(val_set)} samples, {len(val_set.gloss2idx)} classes and shape {val_set.__getitem__(0)[0].shape}")
 
         # Test
-        test_set = WLASLParquetDataset(body_features_parquet_path=body_features_parquet_path,
-                                       facial_blendshapes_parquet_path=facial_blendshapes_parquet_path,
-                                       metadata_json_path=os.getenv('WLASL_METADATA_PATH'),
-                                       split='test',
-                                       transform=transform,
-                                       features=features,
-                                       include_blendshapes=include_blendshapes,
-                                       fs=fs,
-                                       )
+        test_set = WLASLParquetDataset(**dataloader_args, split="test" )
         print(
             f"       loaded test dataset with {len(test_set)} samples, {len(test_set.gloss2idx)} classes and shape {test_set.__getitem__(0)[0].shape}")
 
@@ -418,7 +402,8 @@ def train(args):
     ####################### TESTING #####################
     print("\n[INFO] Testing checkpointed models starting...\n")
     logging.info("Testing checkpointed models starting...\n")
-    top_result, top_result_name = 0, ""
+    highest_acc, top_result_name, class_metrics_for_highest_acc_chkpt, macro_f1, weighted_f1 = 0, "", None, 0, 0
+    total_params, elapsed_time = 0, 0
 
     if test_loader:
         for i in range(checkpoint_index + 1):
@@ -431,24 +416,66 @@ def train(args):
                     )
                 tested_model.eval()
                 tested_model.train(False)
-                _, eval_acc, _ = evaluate_batch(tested_model, loss_fn, test_loader, device, print_stats=False)
+                _, eval_acc, class_metrics = evaluate_batch(tested_model, loss_fn, test_loader, device, print_stats=False)
 
-                if eval_acc > top_result:
-                    top_result = eval_acc
+                if eval_acc > highest_acc:
+                    highest_acc = eval_acc
                     top_result_name = experiment_name + "/checkpoint_" + checkpoint_id + "_" + str(i)
+                    class_metrics_for_highest_acc_chkpt = class_metrics
 
                 print("checkpoint_" + checkpoint_id + str(i) + "  ->  " + str(eval_acc))
                 logging.info("checkpoint_" + checkpoint_id + str(i) + "  ->  " + str(eval_acc))
 
+        # End of training/val/testing
         end = time.time()
         elapsed_time = end - start
-        print("\nThe top result was recorded at " + str(
-            top_result) + " testing accuracy. The best checkpoint is " + top_result_name + ".")
-        logging.info("The top result was recorded at " + str(
-            top_result) + " testing accuracy. The best checkpoint is " + top_result_name + ".")
+
+        # Calculate weighted F1 score
+        total_support = sum(m["TP"] + m["FN"] for m in class_metrics_for_highest_acc_chkpt.values())
+        weighted_f1 = 0
+
+        for m in class_metrics_for_highest_acc_chkpt.values():
+            support = m["TP"] + m["FN"]
+            precision = m["TP"] / (m["TP"] + m["FP"]) if (m["TP"] + m["FP"]) > 0 else 0
+            recall = m["TP"] / (m["TP"] + m["FN"]) if (m["TP"] + m["FN"]) > 0 else 0
+            f1 = (2 * precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
+            weighted_f1 += (support / total_support) * f1
+
+        # Calculate macro F1 score
+        f1_scores = []
+        for class_id, m in class_metrics_for_highest_acc_chkpt.items():
+            tp = m["TP"]
+            fp = m["FP"]
+            fn = m["FN"]
+            precision = tp / (tp + fp) if (tp + fp) > 0 else 0
+            recall = tp / (tp + fn) if (tp + fn) > 0 else 0
+            f1 = (2 * precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
+            f1_scores.append(f1)
+        macro_f1 = sum(f1_scores) / len(f1_scores)
+
+        # Get model parameters count
+        total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+
+        print("\n=======================================")
+        print(f"🟢 The best testing checkpoint: {top_result_name}:")
+        print(f"    ✅ Testing accuracy: {highest_acc:.3f}")
+        print(f"    ✅ Macro F1 score: {macro_f1:.3f}")
+        print(f"    ✅ Weighted F1 score: {weighted_f1:.3f}")
+        print("=======================================")
+        print(f"🔢  Total trainable parameters: {total_params:,}")
+        print(f"⏱️  Elapsed time: {elapsed_time:.2f} sec")
+
+
+        logging.info("\n=======================================")
+        logging.info(f"The best testing checkpoint: {top_result_name}:")
+        logging.info(f"   Testing accuracy: {highest_acc:.3f}")
+        logging.info(f"   Macro F1 score: {macro_f1:.3f}")
+        logging.info(f"   Weighted F1 score: {weighted_f1:.3f}")
+        logging.info(f"   Total trainable parameters: {total_params:,}")
+        logging.info(f"   Elapsed time: {elapsed_time:.2f} sec")
         logging.info("----------------Config information----------------------- ")
-        logging.info(" - Elapsed Time training (seconds): " + str(elapsed_time))
-        logging.info("- Experiment Args: " + str(experiment_args))
+        logging.info(" - Experiment Args: " + str(experiment_args))
 
     if args.plot_stats or args.plot_lr:
         plot_dir = os.path.join("out-img", experiment_name)
@@ -485,8 +512,8 @@ def train(args):
     print("\nAny desired statistics have been plotted.\nThe experiment is finished.")
     logging.info("\nAny desired statistics have been plotted.\nThe experiment is finished.")
 
-    # Return highest accuracy
-    return top_result
+    # Return highest accuracy, highest F1 scores, trainable_parameters, elapsed_time
+    return highest_acc, macro_f1, weighted_f1, total_params, elapsed_time
 
 
 if __name__ == '__main__':
