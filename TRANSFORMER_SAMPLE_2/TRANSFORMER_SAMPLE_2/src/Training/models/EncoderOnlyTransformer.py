@@ -41,23 +41,12 @@ class SPOTEREncoderOnly(nn.Module):
 
         self.classifier = nn.Linear(hidden_dim, num_classes)
 
-    def pad_to_heads(self, x):
-        B, T, D = x.shape
-        if D % self.n_heads != 0:
-            target_dim = ((D + self.n_heads - 1) // self.n_heads) * self.n_heads
-            pad_width = target_dim - D
-            pad_tensor = torch.full((B, T, pad_width), fill_value=-2.0, device=x.device)
-            x = torch.cat([x, pad_tensor], dim=-1)
-        return x
-
     def forward(self, x):
         B, T, D = x.shape
 
         # Padding mask: True where padding
         pad_mask = (x == -2).all(dim=-1)  # [B, T]
 
-        # Pad feature dim to match n_heads
-        x = self.pad_to_heads(x)
 
         # Replace missing values with 0
         x = x.clone()

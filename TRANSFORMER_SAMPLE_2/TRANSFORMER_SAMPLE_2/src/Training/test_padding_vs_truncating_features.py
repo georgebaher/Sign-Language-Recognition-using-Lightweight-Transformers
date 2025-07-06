@@ -1,6 +1,6 @@
 import argparse
-import math
 import os
+import math
 from train import train, get_default_args
 
 def agresti_coull_interval(p_hat, n, z=1.96):
@@ -16,7 +16,7 @@ def agresti_coull_interval(p_hat, n, z=1.96):
     margin = z * math.sqrt(p_tilde * (1 - p_tilde) / n_tilde)
     return margin
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     parser = argparse.ArgumentParser("", parents=[get_default_args()], add_help=False)
     base_args = parser.parse_args([])
 
@@ -29,6 +29,7 @@ if __name__ == '__main__':
     base_args.sgd_momentum = 0.9
     base_args.dataset_name = "WLASL100"
     base_args.include_blendshapes = 0
+    base_args.fs = 1
     base_args.num_classes = 100
     base_args.epochs = 100
     base_args.lr = 1e-3
@@ -41,32 +42,43 @@ if __name__ == '__main__':
         "HAND_POSE_LANDMARKS",
         "HAND_ANGLES",
         "POSE_ANGLES",
-        "HAND_POSE_ANGLES"
+        "HAND_POSE_ANGLES",
     ]
+
     original_dims = [
         (84, 84),
         (50, 42),
         (134, 126),
         (420, 313),
         (300, 228),
-        (720, 541)
+        (720, 541),
+    ]
+    hidden_dims = [
+        (88, 88),
+        (56, 48),
+        (136, 128),
+        (424, 320),
+        (304, 232),
+        (720, 544),
     ]
 
     results = []
-    all_fs = [0, 1]
     test_set_size = 258
 
-    for i, feature in enumerate(all_features):
-        for j, fs in enumerate(all_fs):
-            args = argparse.Namespace(**vars(base_args))  # deep copy
-            args.experiment_name = f"{args.model2use.lower()}_{feature.lower()}_fs{fs}"
+    for feature_index, feature in enumerate(all_features):
+        for trunc in [0, 1]:
+            args = argparse.Namespace(**vars(base_args))
+            args.experiment_name = f"encoder_{feature.lower()}_fs{1}_{'trunc' if trunc else 'pad'}"
+            args.hidden_dim = hidden_dims[feature_index][1]
             args.features = feature
-            args.fs = fs
+
+            args.feature_truncation = trunc
+            args.model2use = "encoder"
 
             print(f"\n[INFO] Running experiment: {args.experiment_name}")
             top_acc, m_f1, w_f1, total_params, elapsed_time = train(args)
 
-            # confidence intervals
+            # CI
             acc_margin = agresti_coull_interval(top_acc, test_set_size)
             m_f1_margin = agresti_coull_interval(m_f1, test_set_size)
             w_f1_margin = agresti_coull_interval(w_f1, test_set_size)
@@ -74,39 +86,48 @@ if __name__ == '__main__':
             results.append({
                 "feature": feature,
                 "fs": fs,
+                "method": "truncation" if trunc else "padding",
                 "top_acc": top_acc,
                 "acc_margin": acc_margin,
                 "m_f1": m_f1,
                 "m_f1_margin": m_f1_margin,
                 "w_f1": w_f1,
                 "w_f1_margin": w_f1_margin,
-                "padded_features": hidden_dims[i][j] - original_dims[i][j],
+                "hidden_dim": hidden_dims[feature_index][fs],
+                "padded_features": hidden_dims[feature_index][fs] - original_dims[feature_index][fs],
                 "total_params": total_params,
                 "elapsed_time": elapsed_time
             })
 
-    results_path = "out-logs/__feature_selection_ablation/_results.txt"
+    # Write results
+    results_path = "out-logs/__padding_vs_truncating/_results.txt"
     os.makedirs(os.path.dirname(results_path), exist_ok=True)
 
     with open(results_path, "w") as f:
-        f.write("==== FEATURE SELECTION ABLATION WITH CONFIDENCE INTERVALS ====\n")
-        f.write("{:<25} {:<5} {:<20} {:<20} {:<20} {:<10} {:<12} {:<15} {:<12}\n".format(
-            "Feature", "FS", "Top Acc (Â±)", "Macro F1 (Â±)", "Weighted F1 (Â±)",
+        f.write("==== PADDING VS TRUNCATION COMPARISON ====\n")
+        f.write("{:<25} {:<5} {:<10} {:<20} {:<20} {:<20} {:<10} {:<12} {:<15} {:<12}\n".format(
+            "Feature", "FS", "Method", "Top Acc (±)", "Macro F1 (±)", "Weighted F1 (±)",
             "Padded", "HiddenDim", "Total Params", "Time"
         ))
-        f.write("-" * 160 + "\n")
+        f.write("-" * 180 + "\n")
         for res in results:
-            acc_str = f"{res['top_acc']*100:.2f} Â± {res['acc_margin']*100:.2f}"
-            m_f1_str = f"{res['m_f1']*100:.2f} Â± {res['m_f1_margin']*100:.2f}"
-            w_f1_str = f"{res['w_f1']*100:.2f} Â± {res['w_f1_margin']*100:.2f}"
-            padded = res["padded_features"]
-            hidden_dim = res["hidden_dim"]
-            params_str = f"{res['total_params']:,}"
+            acc_str = f"{res['top_acc']*100:.2f} ± {res['acc_margin']*100:.2f}"
+            m_f1_str = f"{res['m_f1']*100:.2f} ± {res['m_f1_margin']*100:.2f}"
+            w_f1_str = f"{res['w_f1']*100:.2f} ± {res['w_f1_margin']*100:.2f}"
+            param_str = f"{res['total_params']:,}"
             time_str = f"{res['elapsed_time']:.1f}s"
 
-            f.write("{:<25} {:<5} {:<20} {:<20} {:<20} {:<10} {:<12} {:<15} {:<12}\n".format(
-                res["feature"], res["fs"], acc_str, m_f1_str, w_f1_str,
-                padded, hidden_dim, params_str, time_str
+            f.write("{:<25} {:<5} {:<10} {:<20} {:<20} {:<20} {:<10} {:<12} {:<15} {:<12}\n".format(
+                res["feature"],
+                res["fs"],
+                res["method"],
+                acc_str,
+                m_f1_str,
+                w_f1_str,
+                res["padded_features"],
+                res["hidden_dim"],
+                param_str,
+                time_str
             ))
 
-    print(f"\n[INFO] Saved feature selection results with confidence intervals to {results_path}")
+    print(f"\n[INFO] Saved comparison results to {results_path}")

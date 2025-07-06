@@ -2,7 +2,6 @@ import torch
 import math
 import torch.nn as nn
 
-
 class PositionalEncodingSinCos(nn.Module):
     def __init__(self, d_model: int, dropout: float = 0.1, max_len: int = 5000,):
         super().__init__()
@@ -42,22 +41,9 @@ class SPOTERTransformer(nn.Module):
         self.classifier = nn.Linear(hidden_dim, num_classes)
         print(f"[INFO] SPOTER model initialized with {'no ' if not w_pe else ''}positional encoding")
 
-    def pad_to_heads(self, x: torch.Tensor) -> torch.Tensor:
-        """Pad the feature dimension to be divisible by number of heads."""
-        B, T, D = x.shape
-        if D % self.n_heads != 0:
-            target_dim = ((D + self.n_heads - 1) // self.n_heads) * self.n_heads
-            pad_width = target_dim - D
-            pad_tensor = torch.full((B, T, pad_width), fill_value=-2.0, device=x.device)
-            x = torch.cat([x, pad_tensor], dim=-1)
-        return x
-
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # x: [B, T, D]
         B, T, D = x.shape
-
-        # Pad feature dim if needed
-        x = self.pad_to_heads(x)
 
         # Pad mask: True where padding exists
         pad_mask = (x == -2).all(dim=-1)  # [B, T]

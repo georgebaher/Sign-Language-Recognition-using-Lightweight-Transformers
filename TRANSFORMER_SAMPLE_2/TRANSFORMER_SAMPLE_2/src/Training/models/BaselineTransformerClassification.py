@@ -3,8 +3,6 @@ import math
 import torch.nn as nn
 
 
-
-
 class PositionalEncodingSinCos(nn.Module):
     def __init__(self, d_model: int, dropout: float = 0.1, max_len: int = 5000, w_pe=True):
         super().__init__()
@@ -42,16 +40,6 @@ class BaselineTransformerClassification(nn.Module):
         self.linear_class = nn.Linear(hidden_dim, num_classes)
         print(f"[INFO] Transformer model initialized with {'no ' if not w_pe else ''}positional encoding")
 
-    def pad_to_heads(self, x: torch.Tensor) -> torch.Tensor:
-        """Pad the feature dimension to be divisible by number of heads."""
-        B, T, D = x.shape
-        if D % self.n_heads != 0:
-            target_dim = ((D + self.n_heads - 1) // self.n_heads) * self.n_heads
-            pad_width = target_dim - D
-            pad_tensor = torch.full((B, T, pad_width), fill_value=-2.0, device=x.device)
-            x = torch.cat([x, pad_tensor], dim=-1)
-        return x
-
     def forward(self, inputs):
         h = inputs.float()  # [B, T, D]
         # print(h.shape)
@@ -59,8 +47,6 @@ class BaselineTransformerClassification(nn.Module):
         # Create a mask where all features in a timestep are -2 → it's a padding frame
         src_key_padding_mask = (inputs == -2).all(dim=-1)  # shape: [batch_size, seq_len]
 
-        # Pad feature dim if needed
-        h = self.pad_to_heads(h)
 
         # Replace all -2 values (missing features) with 0
         h[h == -2] = 0.0

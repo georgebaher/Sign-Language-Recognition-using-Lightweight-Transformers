@@ -12,22 +12,10 @@ class LSTMClassifier(nn.Module):
         self.classifier = nn.Linear(hidden_dim, num_classes)
         print(f"[INFO] LSTM model initialized with {num_layers} layers and {hidden_dim} hidden units")
 
-    def pad_to_heads(self, x: torch.Tensor) -> torch.Tensor:
-        """Pad the feature dimension to be divisible by number of heads."""
-        B, T, D = x.shape
-        if D % self.n_heads != 0:
-            target_dim = ((D + self.n_heads - 1) // self.n_heads) * self.n_heads
-            pad_width = target_dim - D
-            pad_tensor = torch.full((B, T, pad_width), fill_value=-2.0, device=x.device)
-            x = torch.cat([x, pad_tensor], dim=-1)
-        return x
-
     def forward(self, x):
         # x: [B, T, D]
         B, T, D = x.size()
 
-        # Pad feature dim if needed (done here for LSTM, just for consistency with other models)
-        x = self.pad_to_heads(x)
 
         pad_mask = (x == -2).all(dim=-1)
         x = x.clone()

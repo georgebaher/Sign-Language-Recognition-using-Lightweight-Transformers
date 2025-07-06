@@ -106,15 +106,19 @@ def main():
         "split": "train",
         "transform": None,
         "features": "HAND_POSE_LANDMARKS",
-        "include_blendshapes": True,
-        "fs": 0
+        "include_blendshapes": False,
+        "fs": 1,
+        "feature_truncation": True,
+        "n_heads": 8
     }
 
     # Create dataset and loader
     dataset = WLASLParquetDataset(**args)
+    _ = dataset.__getitem__(0)
     print(f"[INFO] Loaded dataset with {len(dataset)} samples and {len(dataset.gloss2idx)} classes")
+    dataloader = DataLoader(dataset, batch_size=1, shuffle=True)
 
-    dataloader = DataLoader(dataset, batch_size=32, shuffle=True)
+    print(f"[INFO] Feature dimension is {dataset.feature_dim}")
     print(f'[INFO] loaded {len(dataloader)} batches')
 
     # Iterate and test

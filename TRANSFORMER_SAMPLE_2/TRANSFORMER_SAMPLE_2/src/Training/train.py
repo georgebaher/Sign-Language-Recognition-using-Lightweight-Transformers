@@ -73,6 +73,9 @@ def get_default_args():
     parser.add_argument("--fs", type=int,
                         default=0,
                         help='Use feature selection')
+    parser.add_argument("--feature_truncation", type=int,
+                        default=0,
+                        help='Truncate embedding dimension (number of features) to be divisible by the number of heads')
     parser.add_argument("--num_classes", type=int,
                         default=100,
                         help='Number of classes recognized')
@@ -161,6 +164,7 @@ def train(args):
     features = args.features
     include_blendshapes = args.include_blendshapes
     fs = args.fs
+    feature_truncation = args.feature_truncation
     pe = args.pe
     epochs = args.epochs
     lr = args.lr
@@ -171,6 +175,7 @@ def train(args):
         f"features={features}",
         f"include_blendshapes={include_blendshapes}",
         f"fs={fs}",
+        f"feature_truncation={feature_truncation}",
         f"num_classes={num_classes}",
         f"model={model2use}",
         f"mediapipe_holistic={True if mediapipe_holistic else False}",
@@ -209,6 +214,61 @@ def train(args):
         ]
     )
     # _____________________________________________________________________#
+
+
+
+    ############### DATA LOADERS #####################
+    train_set = val_set = test_set = None
+
+    if dataset_name == "WLASL100":
+        # Map feature type to environment variable names
+        feature_parquet_map = {
+            "HAND_LANDMARKS": "WLASL100_HAND_LANDMARKS_PATH",
+            "POSE_LANDMARKS": "WLASL100_POSE_LANDMARKS_PATH",
+            "HAND_POSE_LANDMARKS": "WLASL100_HAND_POSE_LANDMARKS_PATH",
+            "HAND_ANGLES": "WLASL100_HAND_ANGLES_PATH",
+            "POSE_ANGLES": "WLASL100_POSE_ANGLES_PATH",
+            "HAND_POSE_ANGLES": "WLASL100_HAND_POSE_ANGLES_PATH",
+        }
+        # Resolve parquet path based on selected feature type
+        body_features_parquet_env_var = feature_parquet_map.get(features.upper())
+        if body_features_parquet_env_var is None:
+            raise ValueError(f"Unknown feature type: {features}")
+        body_features_parquet_path = os.getenv(body_features_parquet_env_var)
+        if body_features_parquet_path is None:
+            raise ValueError(f"Environment variable {body_features_parquet_env_var} is not set")
+        # Path for blendshapes
+        facial_blendshapes_parquet_path = os.getenv("WLASL100_FACIAL_BLENDSHAPES_PATH")
+        print("[INFO] Processing WLASL100 dataset...")
+
+        dataloader_args = {"body_features_parquet_path": body_features_parquet_path,
+                           "facial_blendshapes_parquet_path": facial_blendshapes_parquet_path,
+                           "metadata_json_path": os.getenv("WLASL_METADATA_PATH"), "transform": None,
+                           "features": features, "include_blendshapes": include_blendshapes, "fs": fs, "feature_truncation": feature_truncation, "n_heads": n_heads}
+
+        # Training set
+        train_set = WLASLParquetDataset(**dataloader_args, split="train")
+        _ = train_set.__getitem__(0)    # just to execute get_item once at least to set the feature dim
+        hidden_dim = train_set.feature_dim
+        print(f"       loaded train dataset with {len(train_set)} samples, {len(train_set.gloss2idx)} classes and shape {train_set.__getitem__(0)[0].shape}")
+
+        # Validation set
+        val_set = WLASLParquetDataset(**dataloader_args, split="val")
+        print(
+            f"       loaded val dataset with {len(val_set)} samples, {len(val_set.gloss2idx)} classes and shape {val_set.__getitem__(0)[0].shape}")
+
+        # Test
+        test_set = WLASLParquetDataset(**dataloader_args, split="test" )
+        print(
+            f"       loaded test dataset with {len(test_set)} samples, {len(test_set.gloss2idx)} classes and shape {test_set.__getitem__(0)[0].shape}")
+
+    elif dataset_name == "AVASAG":
+        print("[INFO] Processing AVASAG100 dataset...")
+        # TODO: load AVASAG100 dataset (Not yet)
+
+    train_loader = DataLoader(train_set, shuffle=True, batch_size=batch_size)
+    val_loader = DataLoader(val_set, shuffle=False, batch_size=batch_size)
+    test_loader = DataLoader(test_set, shuffle=False, batch_size=1)
 
     ##################### MODELS #########################
     # Construct the model
@@ -251,56 +311,6 @@ def train(args):
     Path("out-checkpoints/" + experiment_name + "/").mkdir(parents=True, exist_ok=True)
     Path("out-img/").mkdir(parents=True, exist_ok=True)
 
-    ############### DATA LOADERS #####################
-    train_set = val_set = test_set = None
-
-    if dataset_name == "WLASL100":
-        # Map feature type to environment variable names
-        feature_parquet_map = {
-            "HAND_LANDMARKS": "WLASL100_HAND_LANDMARKS_PATH",
-            "POSE_LANDMARKS": "WLASL100_POSE_LANDMARKS_PATH",
-            "HAND_POSE_LANDMARKS": "WLASL100_HAND_POSE_LANDMARKS_PATH",
-            "HAND_ANGLES": "WLASL100_HAND_ANGLES_PATH",
-            "POSE_ANGLES": "WLASL100_POSE_ANGLES_PATH",
-            "HAND_POSE_ANGLES": "WLASL100_HAND_POSE_ANGLES_PATH",
-        }
-        # Resolve parquet path based on selected feature type
-        body_features_parquet_env_var = feature_parquet_map.get(features.upper())
-        if body_features_parquet_env_var is None:
-            raise ValueError(f"Unknown feature type: {features}")
-        body_features_parquet_path = os.getenv(body_features_parquet_env_var)
-        if body_features_parquet_path is None:
-            raise ValueError(f"Environment variable {body_features_parquet_env_var} is not set")
-        # Path for blendshapes
-        facial_blendshapes_parquet_path = os.getenv("WLASL100_FACIAL_BLENDSHAPES_PATH")
-        print("[INFO] Processing WLASL100 dataset...")
-
-        dataloader_args = {"body_features_parquet_path": body_features_parquet_path,
-                           "facial_blendshapes_parquet_path": facial_blendshapes_parquet_path,
-                           "metadata_json_path": os.getenv("WLASL_METADATA_PATH"), "transform": None,
-                           "features": features, "include_blendshapes": include_blendshapes, "fs": fs}
-
-        # Training set
-        train_set = WLASLParquetDataset(**dataloader_args, split="train")
-        print(f"       loaded train dataset with {len(train_set)} samples, {len(train_set.gloss2idx)} classes and shape {train_set.__getitem__(0)[0].shape}")
-
-        # Validation set
-        val_set = WLASLParquetDataset(**dataloader_args, split="val")
-        print(
-            f"       loaded val dataset with {len(val_set)} samples, {len(val_set.gloss2idx)} classes and shape {val_set.__getitem__(0)[0].shape}")
-
-        # Test
-        test_set = WLASLParquetDataset(**dataloader_args, split="test" )
-        print(
-            f"       loaded test dataset with {len(test_set)} samples, {len(test_set.gloss2idx)} classes and shape {test_set.__getitem__(0)[0].shape}")
-
-    elif dataset_name == "AVASAG":
-        print("[INFO] Processing AVASAG100 dataset...")
-        # TODO: load AVASAG100 dataset (Not yet)
-
-    train_loader = DataLoader(train_set, shuffle=True, batch_size=batch_size)
-    val_loader = DataLoader(val_set, shuffle=False, batch_size=batch_size)
-    test_loader = DataLoader(test_set, shuffle=False, batch_size=1)
 
     ####################### LOSS FUNCTION, OPTIMIZER & SCHEDULER #####################
     loss_fn = nn.CrossEntropyLoss()
