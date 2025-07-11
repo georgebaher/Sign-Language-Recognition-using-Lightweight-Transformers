@@ -15,7 +15,7 @@ from src.Training.models.SPOTER import SPOTERTransformer
 from src.Training.models.EncoderOnlyTransformer import SPOTEREncoderOnly
 from src.Training.models.LSTM import LSTMClassifier
 from src.Training.trainingUtils.utils import evaluate_batch
-from src.Training.dataloader.dataloader import WLASLParquetDataset
+from src.Training.dataloader.features_dataloader import WLASLParquetDataset
 from src.Training.train import get_default_args
 import matplotlib.pyplot as plt
 import numpy as np

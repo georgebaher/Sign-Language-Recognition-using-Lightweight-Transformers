@@ -7,7 +7,6 @@ WLASL/start_kit/videos/
 Feature_Processing/Data/parquet/
 WLASL/
 out-checkpoints/
-out-logs/
 out-img/
 tmp/
-
+vis_results/

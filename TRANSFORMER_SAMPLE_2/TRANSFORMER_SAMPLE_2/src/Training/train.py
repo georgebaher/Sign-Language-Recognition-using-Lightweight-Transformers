@@ -18,6 +18,7 @@ from transformers import (
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from dotenv import load_dotenv
+
 load_dotenv()
 
 sys.path.append('.')
@@ -26,7 +27,9 @@ sys.path.append('../../')
 sys.path.append('../../../')
 from src.utils.args_utils import *
 from src.Training.trainingUtils.utils import train_epoch_batch, evaluate_batch
-from src.Training.dataloader.dataloader import WLASLParquetDataset
+### MODIFIED: Import both dataset classes ###
+from src.Training.dataloader.features_dataloader import WLASLParquetDataset
+from src.Training.dataloader.blendshapes_dataloader import WLASLBlendshapesDataset
 from src.Training.models.BaselineTransformerClassification import BaselineTransformerClassification
 from src.Training.models.SPOTER import SPOTERTransformer
 from src.Training.models.LSTM import LSTMClassifier
@@ -64,18 +67,21 @@ def get_default_args():
                         choices=["WLASL100", "AVASAG100"],
                         default="WLASL100",
                         help='Dataset used. choices=["WLASL100", "AVASAG100"]')
+    ### MODIFIED: Added FACIAL_BLENDSHAPES as an option ###
     parser.add_argument("--features", type=str,
-                        choices=["HAND_LANDMARKS", "POSE_LANDMARKS", "HAND_POSE_LANDMARKS", "HAND_ANGLES", "POSE_ANGLES", "HAND_POSE_ANGLES"],
+                        choices=["HAND_LANDMARKS", "POSE_LANDMARKS", "HAND_POSE_LANDMARKS", "HAND_ANGLES",
+                                 "POSE_ANGLES", "HAND_POSE_ANGLES", "FACIAL_BLENDSHAPES"],
                         default="HAND_POSE_LANDMARKS",
-                        help='Features used. Choices=["HAND_LANDMARKS", "POSE_LANDMARKS", "HAND_POSE_LANDMARKS", "HAND_ANGLES", "POSE_ANGLES", "HAND_POSE_ANGLES"]')
+                        help='Features used. Choices include body parts or "FACIAL_BLENDSHAPES" for facial features only.')
     parser.add_argument("--include_blendshapes", type=int, default=0,
-                        help='choose whether to include facial blendshapes')
+                        help='choose whether to include facial blendshapes (with body features)')
     parser.add_argument("--fs", type=int,
                         default=0,
-                        help='Use feature selection')
-    parser.add_argument("--feature_truncation", type=int,
-                        default=0,
-                        help='Truncate embedding dimension (number of features) to be divisible by the number of heads')
+                        help='Use feature selection (only for body features)')
+    parser.add_argument("--feature_padding_mode", type=str,
+                        default="sentinel",
+                        choices=["sentinel", "repeat", "truncate"],
+                        help='Truncate embedding dimension (number of features) to be divisible by the number of heads, or pad with -2s or repeat columns')
     parser.add_argument("--num_classes", type=int,
                         default=100,
                         help='Number of classes recognized')
@@ -103,13 +109,7 @@ def get_default_args():
     parser.add_argument("--save_checkpoints", type=bool, default=True,
                         help="Determines whether to save weights checkpoints")
 
-    # # TODO: Gaussian noise normalization (Not yet)
     parser.add_argument("--transform", type=int, default=0, help="Apply gaussian noise transformation")
-    # parser.add_argument("--gaussian_mean", type=int, default=0, help="Mean parameter for Gaussian noise layer")
-    # parser.add_argument("--gaussian_std", type=int, default=0.001,
-    #                     help="Standard deviation parameter for Gaussian noise layer")
-
-    # Visualization (Not yet)
     parser.add_argument("--plot_stats", type=bool, default=True,
                         help="Determines whether continuous statistics should be plotted at the end")
     parser.add_argument("--plot_lr", type=bool, default=True,
@@ -138,12 +138,10 @@ def train(args):
     # TRAINING PREPARATION AND MODULES
 
     ##########  Initialize all the random seeds and set device ############
-    # init seeds
     fix_randomisation(args)
-    # set device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f'[INFO] Running using {device} on <{torch.cuda.get_device_name(0)}>')
-    #_____________________________________________________________________#
+    # _____________________________________________________________________#
 
     ##########  PARAMETERS ############
     mediapipe_holistic = args.mediapipe_holistic
@@ -160,49 +158,48 @@ def train(args):
     scheduler_type = args.scheduler_type
     clip_weights = args.clip_weights
     clip_gradients = args.clip_gradients
-    transform = args.transform  # TODO: implement transformations (Not yet)
+    transform = args.transform
     features = args.features
     include_blendshapes = args.include_blendshapes
     fs = args.fs
-    feature_truncation = args.feature_truncation
+    feature_padding_mode = args.feature_padding_mode
     pe = args.pe
     epochs = args.epochs
     lr = args.lr
     log_freq = args.log_freq
     save_checkpoints = args.save_checkpoints
-    experiment_args = ", ".join([
-        f"dataset={dataset_name}",
-        f"features={features}",
-        f"include_blendshapes={include_blendshapes}",
-        f"fs={fs}",
-        f"feature_truncation={feature_truncation}",
-        f"num_classes={num_classes}",
-        f"model={model2use}",
-        f"mediapipe_holistic={True if mediapipe_holistic else False}",
-        f"dim={hidden_dim}",
-        f"heads={n_heads}",
-        f"n_layers={n_layers}",
-        f"PE={pe}",
-        f"pad={padding}",
-        f"clip_weights={clip_weights}",
-        f"clip_gradients={clip_gradients}",
-        f"opt={optimizer_name}",
-        f"sgd_momentum={sgd_momentum}",
-        f"scheduler={scheduler_type}",
-        f"bs={batch_size}",
-        f"epochs={epochs}",
-        f"lr={lr:.0e}",  # scientific notation (e.g., 1e-03)
-        f"logfreq={log_freq}",
-        f"checkpoints={save_checkpoints}",
-    ])
+    experiment_args = {
+        "dataset": dataset_name,
+        "features": features,
+        "include_blendshapes": include_blendshapes,
+        "fs": fs,
+        "feature_padding_mode": feature_padding_mode,
+        "num_classes": num_classes,
+        "model": model2use,
+        "mediapipe_holistic": bool(mediapipe_holistic),
+        "dim": hidden_dim,
+        "heads": n_heads,
+        "n_layers": n_layers,
+        "PE": pe,
+        "pad": padding,
+        "clip_weights": clip_weights,
+        "clip_gradients": clip_gradients,
+        "opt": optimizer_name,
+        "sgd_momentum": sgd_momentum,
+        "scheduler": scheduler_type,
+        "bs": batch_size,
+        "epochs": epochs,
+        "lr": f"{lr:.0e}",
+        "logfreq": log_freq,
+        "checkpoints": save_checkpoints,
+    }
+
     experiment_name = args.experiment_name
 
-    # Set the output format to print into the console and save into LOG file
-    log_dir = "out-logs"  # or "out-logs", "results/logs", etc.
-    os.makedirs(log_dir, exist_ok=True)  # Create the directory if it doesn't exist
+    log_dir = "out-logs"
+    os.makedirs(log_dir, exist_ok=True)
     log_path = os.path.join(log_dir, f"{experiment_name}.log")
 
-    # Clear previous logging handlers to allow reconfiguration
     for handler in logging.root.handlers[:]:
         logging.root.removeHandler(handler)
 
@@ -215,50 +212,69 @@ def train(args):
     )
     # _____________________________________________________________________#
 
-
-
     ############### DATA LOADERS #####################
     train_set = val_set = test_set = None
 
     if dataset_name == "WLASL100":
-        # Map feature type to environment variable names
-        feature_parquet_map = {
-            "HAND_LANDMARKS": "WLASL100_HAND_LANDMARKS_PATH",
-            "POSE_LANDMARKS": "WLASL100_POSE_LANDMARKS_PATH",
-            "HAND_POSE_LANDMARKS": "WLASL100_HAND_POSE_LANDMARKS_PATH",
-            "HAND_ANGLES": "WLASL100_HAND_ANGLES_PATH",
-            "POSE_ANGLES": "WLASL100_POSE_ANGLES_PATH",
-            "HAND_POSE_ANGLES": "WLASL100_HAND_POSE_ANGLES_PATH",
-        }
-        # Resolve parquet path based on selected feature type
-        body_features_parquet_env_var = feature_parquet_map.get(features.upper())
-        if body_features_parquet_env_var is None:
-            raise ValueError(f"Unknown feature type: {features}")
-        body_features_parquet_path = os.getenv(body_features_parquet_env_var)
-        if body_features_parquet_path is None:
-            raise ValueError(f"Environment variable {body_features_parquet_env_var} is not set")
-        # Path for blendshapes
         facial_blendshapes_parquet_path = os.getenv("WLASL100_FACIAL_BLENDSHAPES_PATH")
-        print("[INFO] Processing WLASL100 dataset...")
+        metadata_path = os.getenv("WLASL_METADATA_PATH")
 
-        dataloader_args = {"body_features_parquet_path": body_features_parquet_path,
-                           "facial_blendshapes_parquet_path": facial_blendshapes_parquet_path,
-                           "metadata_json_path": os.getenv("WLASL_METADATA_PATH"), "transform": None,
-                           "features": features, "include_blendshapes": include_blendshapes, "fs": fs, "feature_truncation": feature_truncation, "n_heads": n_heads}
+        ### MODIFIED: Conditional dataloader selection ###
+        if features.upper() == "FACIAL_BLENDSHAPES":
+            print("[INFO] Processing WLASL100 dataset with FACIAL_BLENDSHAPES only...")
+            if facial_blendshapes_parquet_path is None:
+                raise ValueError("Environment variable WLASL100_FACIAL_BLENDSHAPES_PATH is not set")
 
-        # Training set
-        train_set = WLASLParquetDataset(**dataloader_args, split="train")
-        _ = train_set.__getitem__(0)    # just to execute get_item once at least to set the feature dim
+            dataloader_args = {
+                "facial_blendshapes_parquet_path": facial_blendshapes_parquet_path,
+                "metadata_json_path": metadata_path,
+                "transform": None,
+                "feature_padding_mode": feature_padding_mode,
+                "n_heads": n_heads
+            }
+            DatasetClass = WLASLBlendshapesDataset
+        else:  # Original logic for body features
+            print("[INFO] Processing WLASL100 dataset with body features...")
+            feature_parquet_map = {
+                "HAND_LANDMARKS": "WLASL100_HAND_LANDMARKS_PATH",
+                "POSE_LANDMARKS": "WLASL100_POSE_LANDMARKS_PATH",
+                "HAND_POSE_LANDMARKS": "WLASL100_HAND_POSE_LANDMARKS_PATH",
+                "HAND_ANGLES": "WLASL100_HAND_ANGLES_PATH",
+                "POSE_ANGLES": "WLASL100_POSE_ANGLES_PATH",
+                "HAND_POSE_ANGLES": "WLASL100_HAND_POSE_ANGLES_PATH",
+            }
+            body_features_parquet_env_var = feature_parquet_map.get(features.upper())
+            if body_features_parquet_env_var is None:
+                raise ValueError(f"Unknown feature type: {features}")
+            body_features_parquet_path = os.getenv(body_features_parquet_env_var)
+            if body_features_parquet_path is None:
+                raise ValueError(f"Environment variable {body_features_parquet_env_var} is not set")
+
+            dataloader_args = {
+                "body_features_parquet_path": body_features_parquet_path,
+                "facial_blendshapes_parquet_path": facial_blendshapes_parquet_path,
+                "metadata_json_path": metadata_path,
+                "transform": None,
+                "features": features,
+                "include_blendshapes": include_blendshapes,
+                "fs": fs,
+                "feature_padding_mode": feature_padding_mode,
+                "n_heads": n_heads
+            }
+            DatasetClass = WLASLParquetDataset
+
+        # Instantiate datasets using the selected class and arguments
+        train_set = DatasetClass(**dataloader_args, split="train")
         hidden_dim = train_set.feature_dim
-        print(f"       loaded train dataset with {len(train_set)} samples, {len(train_set.gloss2idx)} classes and shape {train_set.__getitem__(0)[0].shape}")
+        experiment_args["dim"] = hidden_dim
+        print(
+            f"       loaded train dataset with {len(train_set)} samples, {len(train_set.gloss2idx)} classes and shape {train_set.__getitem__(0)[0].shape}")
 
-        # Validation set
-        val_set = WLASLParquetDataset(**dataloader_args, split="val")
+        val_set = DatasetClass(**dataloader_args, split="val")
         print(
             f"       loaded val dataset with {len(val_set)} samples, {len(val_set.gloss2idx)} classes and shape {val_set.__getitem__(0)[0].shape}")
 
-        # Test
-        test_set = WLASLParquetDataset(**dataloader_args, split="test" )
+        test_set = DatasetClass(**dataloader_args, split="test")
         print(
             f"       loaded test dataset with {len(test_set)} samples, {len(test_set.gloss2idx)} classes and shape {test_set.__getitem__(0)[0].shape}")
 
@@ -311,7 +327,6 @@ def train(args):
     Path("out-checkpoints/" + experiment_name + "/").mkdir(parents=True, exist_ok=True)
     Path("out-img/").mkdir(parents=True, exist_ok=True)
 
-
     ####################### LOSS FUNCTION, OPTIMIZER & SCHEDULER #####################
     loss_fn = nn.CrossEntropyLoss()
     if optimizer_name == "SGD":
@@ -331,7 +346,7 @@ def train(args):
         scheduler = get_cosine_schedule_with_warmup(
             optimizer,
             num_warmup_steps=warmup_steps,
-            num_training_steps=extended_steps  # total decay over 2x epochs
+            num_training_steps=extended_steps
         )
     elif scheduler_type == "linear":
         scheduler = get_linear_schedule_with_warmup(
@@ -362,8 +377,10 @@ def train(args):
     start = time.time()
 
     for epoch in range(args.epochs):
-        average_train_loss, average_train_acc = train_epoch_batch(model, train_loader, loss_fn, optimizer, device, scheduler=scheduler,
-                                                                  batch_size=batch_size, clip_gradients=clip_gradients, clip_weights=clip_weights)
+        average_train_loss, average_train_acc = train_epoch_batch(model, train_loader, loss_fn, optimizer, device,
+                                                                  scheduler=scheduler,
+                                                                  batch_size=batch_size, clip_gradients=clip_gradients,
+                                                                  clip_weights=clip_weights)
         train_losses.append(average_train_loss)
         train_accs.append(average_train_acc)
 
@@ -401,9 +418,8 @@ def train(args):
                 print("[" + str(epoch + 1) + "] VALIDATION | acc: " + str(average_val_acc))
                 logging.info("[" + str(epoch + 1) + "] VALIDATION | acc: " + str(average_val_acc))
 
-
         # Reset the top accuracies on static subsets
-        if epoch % 10 == 0:
+        if epoch % 10 == 0 and epoch != 0:
             top_train_acc, top_val_acc = 0, 0
             checkpoint_index += 1
 
@@ -416,77 +432,81 @@ def train(args):
     total_params, elapsed_time = 0, 0
 
     if test_loader:
-        for i in range(checkpoint_index + 1):
-            for checkpoint_id in ["t", "v"]:
-                # tested_model = VisionTransformer(dim=2, mlp_dim=108, num_classes=100, depth=12, heads=8)
-                with warnings.catch_warnings():
-                    warnings.simplefilter("ignore", category=FutureWarning)
-                    tested_model = torch.load(
-                        "out-checkpoints/" + experiment_name + "/checkpoint_" + checkpoint_id + str(i) + ".pth"
-                    )
-                tested_model.eval()
-                tested_model.train(False)
-                _, eval_acc, class_metrics = evaluate_batch(tested_model, loss_fn, test_loader, device, print_stats=False)
+        # Check if any checkpoints were created before proceeding
+        if checkpoint_index == 0 and not any(
+                f.startswith('checkpoint_') for f in os.listdir(f"out-checkpoints/{experiment_name}/")):
+            print("\n[WARNING] No checkpoints were saved during training. Skipping testing.")
+            logging.warning("No checkpoints were saved during training. Skipping testing.")
+        else:
+            for i in range(checkpoint_index + 1):
+                for checkpoint_id in ["t", "v"]:
+                    checkpoint_path = f"out-checkpoints/{experiment_name}/checkpoint_{checkpoint_id}{i}.pth"
+                    if not os.path.exists(checkpoint_path):
+                        continue
 
-                if eval_acc > highest_acc:
-                    highest_acc = eval_acc
-                    top_result_name = experiment_name + "/checkpoint_" + checkpoint_id + "_" + str(i)
-                    class_metrics_for_highest_acc_chkpt = class_metrics
+                    with warnings.catch_warnings():
+                        warnings.simplefilter("ignore", category=FutureWarning)
+                        tested_model = torch.load(checkpoint_path)
 
-                print("checkpoint_" + checkpoint_id + str(i) + "  ->  " + str(eval_acc))
-                logging.info("checkpoint_" + checkpoint_id + str(i) + "  ->  " + str(eval_acc))
+                    tested_model.eval()
+                    tested_model.train(False)
+                    _, eval_acc, class_metrics = evaluate_batch(tested_model, loss_fn, test_loader, device,
+                                                                print_stats=False)
 
-        # End of training/val/testing
-        end = time.time()
-        elapsed_time = end - start
+                    if eval_acc > highest_acc:
+                        highest_acc = eval_acc
+                        top_result_name = f"{experiment_name}/checkpoint_{checkpoint_id}_{i}"
+                        class_metrics_for_highest_acc_chkpt = class_metrics
 
-        # Calculate weighted F1 score
-        total_support = sum(m["TP"] + m["FN"] for m in class_metrics_for_highest_acc_chkpt.values())
-        weighted_f1 = 0
+                    print(f"checkpoint_{checkpoint_id}{i}  ->  {eval_acc}")
+                    logging.info(f"checkpoint_{checkpoint_id}{i}  ->  {eval_acc}")
 
-        for m in class_metrics_for_highest_acc_chkpt.values():
-            support = m["TP"] + m["FN"]
-            precision = m["TP"] / (m["TP"] + m["FP"]) if (m["TP"] + m["FP"]) > 0 else 0
-            recall = m["TP"] / (m["TP"] + m["FN"]) if (m["TP"] + m["FN"]) > 0 else 0
-            f1 = (2 * precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
-            weighted_f1 += (support / total_support) * f1
+            end = time.time()
+            elapsed_time = end - start
 
-        # Calculate macro F1 score
-        f1_scores = []
-        for class_id, m in class_metrics_for_highest_acc_chkpt.items():
-            tp = m["TP"]
-            fp = m["FP"]
-            fn = m["FN"]
-            precision = tp / (tp + fp) if (tp + fp) > 0 else 0
-            recall = tp / (tp + fn) if (tp + fn) > 0 else 0
-            f1 = (2 * precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
-            f1_scores.append(f1)
-        macro_f1 = sum(f1_scores) / len(f1_scores)
+            if class_metrics_for_highest_acc_chkpt:
+                # Calculate weighted F1 score
+                total_support = sum(m["TP"] + m["FN"] for m in class_metrics_for_highest_acc_chkpt.values())
+                weighted_f1 = 0
+                for m in class_metrics_for_highest_acc_chkpt.values():
+                    support = m["TP"] + m["FN"]
+                    precision = m["TP"] / (m["TP"] + m["FP"]) if (m["TP"] + m["FP"]) > 0 else 0
+                    recall = m["TP"] / (m["TP"] + m["FN"]) if (m["TP"] + m["FN"]) > 0 else 0
+                    f1 = (2 * precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
+                    weighted_f1 += (support / total_support) * f1
 
-        # Get model parameters count
-        total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+                # Calculate macro F1 score
+                f1_scores = []
+                for class_id, m in class_metrics_for_highest_acc_chkpt.items():
+                    tp, fp, fn = m["TP"], m["FP"], m["FN"]
+                    precision = tp / (tp + fp) if (tp + fp) > 0 else 0
+                    recall = tp / (tp + fn) if (tp + fn) > 0 else 0
+                    f1 = (2 * precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
+                    f1_scores.append(f1)
+                macro_f1 = sum(f1_scores) / len(f1_scores) if f1_scores else 0
 
+            total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
 
-        print("\n=======================================")
-        print(f"🟢 The best testing checkpoint: {top_result_name}:")
-        print(f"    ✅ Testing accuracy: {highest_acc:.3f}")
-        print(f"    ✅ Macro F1 score: {macro_f1:.3f}")
-        print(f"    ✅ Weighted F1 score: {weighted_f1:.3f}")
-        print("=======================================")
-        print(f"🔢  Total trainable parameters: {total_params:,}")
-        print(f"⏱️  Elapsed time: {elapsed_time:.2f} sec")
+            print("\n=======================================")
+            print(f"The best testing checkpoint: {top_result_name}:")
+            print(f"    Testing accuracy: {highest_acc:.3f}")
+            print(f"    Macro F1 score: {macro_f1:.3f}")
+            print(f"    Weighted F1 score: {weighted_f1:.3f}")
+            print("=======================================")
+            print(f"    Total trainable parameters: {total_params:,}")
+            print(f"    Elapsed time: {elapsed_time:.2f} sec")
+            logging.info("\n=======================================")
 
+            logging.info(f"The best testing checkpoint: {top_result_name}:")
+            logging.info(f"   Testing accuracy: {highest_acc:.3f}")
+            logging.info(f"   Macro F1 score: {macro_f1:.3f}")
+            logging.info(f"   Weighted F1 score: {weighted_f1:.3f}")
+            logging.info(f"   Total trainable parameters: {total_params:,}")
+            logging.info(f"   Elapsed time: {elapsed_time:.2f} sec")
+            logging.info("----------------Config information----------------------- ")
+            logging.info(" - Experiment Args: " + str(experiment_args))
 
-        logging.info("\n=======================================")
-        logging.info(f"The best testing checkpoint: {top_result_name}:")
-        logging.info(f"   Testing accuracy: {highest_acc:.3f}")
-        logging.info(f"   Macro F1 score: {macro_f1:.3f}")
-        logging.info(f"   Weighted F1 score: {weighted_f1:.3f}")
-        logging.info(f"   Total trainable parameters: {total_params:,}")
-        logging.info(f"   Elapsed time: {elapsed_time:.2f} sec")
-        logging.info("----------------Config information----------------------- ")
-        logging.info(" - Experiment Args: " + str(experiment_args))
-
+    # ... (plotting and final return statement remain the same)
     if args.plot_stats or args.plot_lr:
         plot_dir = os.path.join("out-img", experiment_name)
         os.makedirs(plot_dir, exist_ok=True)
@@ -522,8 +542,8 @@ def train(args):
     print("\nAny desired statistics have been plotted.\nThe experiment is finished.")
     logging.info("\nAny desired statistics have been plotted.\nThe experiment is finished.")
 
-    # Return highest accuracy, highest F1 scores, trainable_parameters, elapsed_time
-    return highest_acc, macro_f1, weighted_f1, total_params, elapsed_time
+    # Return highest accuracy, highest F1 scores, trainable_parameters, elapsed_time, hidden_dim
+    return highest_acc, macro_f1, weighted_f1, total_params, elapsed_time, hidden_dim
 
 
 if __name__ == '__main__':

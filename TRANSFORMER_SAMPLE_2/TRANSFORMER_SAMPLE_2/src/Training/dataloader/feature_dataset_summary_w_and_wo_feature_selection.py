@@ -1,6 +1,6 @@
 import os
 from torch.utils.data import DataLoader
-from dataloader import WLASLParquetDataset
+from features_dataloader import WLASLParquetDataset
 from dotenv import load_dotenv
 import pandas as pd
 

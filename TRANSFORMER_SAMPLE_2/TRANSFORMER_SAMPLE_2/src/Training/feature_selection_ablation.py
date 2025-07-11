@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import argparse
 import math
 import os
@@ -29,6 +30,7 @@ if __name__ == '__main__':
     base_args.sgd_momentum = 0.9
     base_args.dataset_name = "WLASL100"
     base_args.include_blendshapes = 0
+    # base_args.feature_padding_mode = "sentinel"
     base_args.num_classes = 100
     base_args.epochs = 100
     base_args.lr = 1e-3
@@ -64,7 +66,7 @@ if __name__ == '__main__':
             args.fs = fs
 
             print(f"\n[INFO] Running experiment: {args.experiment_name}")
-            top_acc, m_f1, w_f1, total_params, elapsed_time = train(args)
+            top_acc, m_f1, w_f1, total_params, elapsed_time, hidden_dim = train(args)
 
             # confidence intervals
             acc_margin = agresti_coull_interval(top_acc, test_set_size)
@@ -80,7 +82,8 @@ if __name__ == '__main__':
                 "m_f1_margin": m_f1_margin,
                 "w_f1": w_f1,
                 "w_f1_margin": w_f1_margin,
-                "padded_features": hidden_dims[i][j] - original_dims[i][j],
+                "hidden_dim": hidden_dim,
+                "padded_features": hidden_dim - original_dims[i][j],
                 "total_params": total_params,
                 "elapsed_time": elapsed_time
             })

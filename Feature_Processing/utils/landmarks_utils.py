@@ -33,7 +33,7 @@ def compute_video_landmarks(video_path: str, gloss: str, show_landmarks: bool = 
         print(f"❌ Error processing video <{video_path}>: {e}")
         return pd.DataFrame()
     finally:
-        processor.holistic.close()  # ✅ explicit native memory cleanup
+        processor.holistic.close()
         del processor
         gc.collect()
 
