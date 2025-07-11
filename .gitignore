@@ -8,5 +8,6 @@ Feature_Processing/Data/parquet/
 WLASL/
 out-checkpoints/
 out-img/
+out-logs/
 tmp/
 vis_results/

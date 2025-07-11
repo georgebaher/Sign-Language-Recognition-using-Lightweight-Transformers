@@ -1,7 +1,0 @@
-==== MODEL COMPARISON WITH CONFIDENCE INTERVALS ====
-Feature                   Model                Top Acc (±)          Macro F1 (±)         Weighted F1 (±)      Total Params    Elapsed Time
--------------------------------------------------------------------------------------------------------------------------------------------------
-HAND_POSE_LANDMARKS       baseline_transformer 46.90 ± 6.04         44.01 ± 6.01         44.73 ± 6.02         8,074,788       629.6s      
-HAND_POSE_LANDMARKS       spoter               55.04 ± 6.02         53.24 ± 6.04         53.35 ± 6.04         8,142,380       560.8s      
-HAND_POSE_LANDMARKS       encoder              53.88 ± 6.04         51.58 ± 6.05         51.55 ± 6.05         3,887,572       340.8s      
-HAND_POSE_LANDMARKS       lstm                 16.28 ± 4.53         13.34 ± 4.19         14.28 ± 4.30         162,756         2728.9s     
