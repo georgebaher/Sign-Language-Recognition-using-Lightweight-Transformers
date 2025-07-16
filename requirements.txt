@@ -1,0 +1,17 @@
+fastdtw==0.3.4
+matplotlib==3.10.3
+numpy~=1.26.4
+pandas==2.2.3
+Pillow==11.2.1
+protobuf==6.31.1
+pygcn==1.1.3
+python-dotenv==1.1.0
+scikit-learn~=1.6.1
+scipy==1.15.3
+seaborn==0.13.2
+streamlit==1.45.1
+torch~=2.5.1+cu121
+torchvision~=0.20.1+cu121
+tqdm==4.67.1
+mediapipe~=0.10.21
+transformers~=4.52.4
