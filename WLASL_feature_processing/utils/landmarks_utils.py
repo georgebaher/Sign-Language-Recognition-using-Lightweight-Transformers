@@ -10,28 +10,28 @@ load_dotenv()
 
 def compute_video_landmarks(video_path: str, gloss: str, show_landmarks: bool = False):
     """
-    Process a single video and return its avasag_vitpose_extracted_landmarks DataFrame with video_id and gloss columns.
+    Process a single video and return its extracted landmarks DataFrames with video_id and gloss columns.
 
     :param video_path: full path to the .mp4 video file
     :param gloss: gloss label for the video
-    :param show_landmarks: whether to display avasag_vitpose_extracted_landmarks
-    :return: DataFrame of avasag_vitpose_extracted_landmarks, or empty DataFrame if failed
+    :param show_landmarks: whether to display extracted_landmarks
+    :return: 3 DataFrames of extracted pose, hand and face landmarks plus annotated video path
     """
 
-    processor = HolisticProcessor(extract=["pose", "hand"])
+    processor = HolisticProcessor(extract=["pose", "hand", "face"])
 
     try:
-        df, video_output_path = processor.process_video(video_path, show_landmarks=show_landmarks, gloss=gloss)
-        if df.empty:
-            print(f"❌ No frames extracted for <{video_path}>")
-            return pd.DataFrame()
+        pose_df, face_df, hand_df, video_output_path = processor.process_video(video_path, save_annotation=show_landmarks, gloss=gloss)
+        if pose_df.empty and face_df.empty and hand_df.empty:
+            print(f"No landmarks extracted at all for <{video_path}>")
+            return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), ""
 
         # return df
-        return df, video_output_path
+        return pose_df, face_df, hand_df, video_output_path
 
     except Exception as e:
-        print(f"❌ Error processing video <{video_path}>: {e}")
-        return pd.DataFrame()
+        print(f"Error processing video <{video_path}>: {e}")
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), ""
     finally:
         processor.holistic.close()
         del processor
@@ -40,9 +40,9 @@ def compute_video_landmarks(video_path: str, gloss: str, show_landmarks: bool = 
 
 def summarize_single_video_landmarks(video_landmarks_df: pd.DataFrame) -> pd.DataFrame:
     """
-    Summarizes one video's frame-wise avasag_vitpose_extracted_landmarks data into a single-row DataFrame, ignoring -2 (missing) values.
+    Summarizes one video's frame-wise landmarks data into a single-row DataFrame, ignoring -2 (missing) values.
 
-    :param video_landmarks_df: Frame-wise avasag_vitpose_extracted_landmarks data for a single video
+    :param video_landmarks_df: Frame-wise extracted landmarks data for a single video
     :return: DataFrame with one row of video-level statistical top_features
     """
     video_id = video_landmarks_df['video_id'].iloc[0]
@@ -76,21 +76,16 @@ def summarize_single_video_landmarks(video_landmarks_df: pd.DataFrame) -> pd.Dat
 
 
 if __name__ == "__main__":
-    # TESTING ...
-    test_video_path = os.getenv('TEST_VIDEO_PATH')
-    # Test avasag_vitpose_extracted_landmarks extraction
-    landmarks_df, vis_path = compute_video_landmarks(test_video_path, "drink", True)
-    print("✅ Extracted avasag_vitpose_extracted_landmarks. Shape of dataframe:", landmarks_df.shape)
-    print(landmarks_df.head())
-    # Test returned visualization path
+    # testing landmarks extraction
+    test_video_path = os.getenv('WLASL_TEST_VIDEO_PATH')
+    pose_df, face_df, hand_df, vis_path = compute_video_landmarks(test_video_path, os.getenv("WLASL_TEST_VIDEO_GLOSS"), True)
     if vis_path and os.path.exists(vis_path):
-        print(f"✅ Landmarked video saved at: {vis_path}")
-        # Optional: open with default video player (Windows)
+        print(f"annotated video saved at: {vis_path}")
         os.system(f'start {vis_path}')
     else:
-        print("❌ Landmark visualization video not found.")
+        print("annotated video not found.")
 
-    # Test summarizing avasag_vitpose_extracted_landmarks across frames using stat metrics
-    vid_landmarks_summary = summarize_single_video_landmarks(landmarks_df)
-    print(vid_landmarks_summary)
+    # test summarizing extracted landmarks across frames using stat metrics
+    vid_landmarks_summary = summarize_single_video_landmarks(pose_df)
+    print(vid_landmarks_summary.head())
     print(f"Number of padded metrics with -2: {list(vid_landmarks_summary.iloc[0].values).count(-2)}")

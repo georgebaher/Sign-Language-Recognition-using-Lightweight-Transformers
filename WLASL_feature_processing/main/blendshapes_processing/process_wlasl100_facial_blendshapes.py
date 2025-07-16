@@ -1,9 +1,8 @@
 import os
 import sys
-sys.path.append('.')
+sys.path.append('')
 sys.path.append('..')
 sys.path.append('../../')
-sys.path.append('../../../')
 import json
 import time
 import pandas as pd
@@ -31,7 +30,7 @@ with open(metadata_path, 'r') as f:
 
 # Load existing processed IDs
 processed_ids, existing_df = load_existing_ids(blendshapes_path)
-print(f"✅ {len(processed_ids)} videos already processed. Skipping those.")
+print(f"{len(processed_ids)} videos already processed. Skipping those.")
 
 # Track results
 all_new_frames = []
@@ -50,7 +49,7 @@ for gloss in tqdm(glosses, desc="Glosses", unit="gloss", colour='green'):
 
         video_path = os.path.join(videos_folder_path, f"{video_id}.mp4")
         if not os.path.isfile(video_path):
-            print(f"⚠️ File not found: {video_path}")
+            print(f"File not found: {video_path}")
             missing_videos.append(video_id)
             continue
 
@@ -70,22 +69,17 @@ if all_new_frames:
 
     save_and_merge(final_df, blendshapes_path, existing_df)
 else:
-    print("⚠️ No new data to save.")
+    print("No new data to save.")
 
 # Save logs
-if missing_videos:
-    with open("missing_blendshapes_videos.txt", "w") as f:
-        f.writelines([vid + "\n" for vid in missing_videos])
-
 if failed_videos:
     with open("failed_blendshapes_videos.txt", "w") as f:
         f.writelines([vid + "\n" for vid in failed_videos])
 
 # Summary
 end = time.time()
-print(f"\n📊 Summary")
-print(f"🕒 Time elapsed: {round(end - start, 2)} sec")
-print(f"🟢 Processed: {len(new_videos_processed)}")
-print(f"⏭️ Skipped: {len(processed_ids)}")
-print(f"⚠️ Missing: {len(missing_videos)}")
-print(f"❌ Failed: {len(failed_videos)}")
+print(f"\nSummary")
+print(f"Time elapsed: {round(end - start, 2)} sec")
+print(f"Processed: {len(new_videos_processed)}")
+print(f"Skipped: {len(processed_ids)}")
+print(f"Failed: {len(failed_videos)}")

@@ -1,5 +1,10 @@
 import mediapipe as mp
 import os
+import sys
+sys.path.append('')
+sys.path.append('..')
+sys.path.append('../../')
+sys.path.append('../../../')
 import cv2
 import numpy as np
 import pandas as pd
@@ -65,7 +70,7 @@ known_blendshapes = [
     "tongueOut"
 ]
 
-# helper to draw avasag_vitpose_extracted_landmarks
+# helper to draw blenshapes
 def draw_landmarks_on_image(rgb_image, detection_result):
     face_landmarks_list = detection_result.face_landmarks
     annotated_image = np.copy(rgb_image)
@@ -101,24 +106,25 @@ def compute_video_facial_blendshapes(video_path: str, gloss: str, show_landmarks
     """
     :param video_path: path to video file
     :param gloss: gloss label for the video
-    :param show_landmarks: whether to display avasag_vitpose_extracted_landmarks
-    :return: DataFrame of facial blendshapes with one row per frame (padded with -2 where missing), optional video path, and failed to extract avasag_vitpose_extracted_landmarks flag
+    :param show_landmarks: whether to display blenshapes
+    :return: DataFrame of facial blendshapes with one row per frame (padded with -2 where missing), optional video path, and failed to extract blendshapes flag
     """
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
-        print(f"❌ Error: Cannot open video {video_path}")
+        print(f"Error: Cannot open video {video_path}")
         return pd.DataFrame(), None, True
 
     video_id = os.path.basename(video_path)
+    vid_id_clean = video_id.split(".")[0]
 
     # get video resolution
     frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    # print(f"🖼️ Video resolution: {frame_width} x {frame_height}")
+    # print(f"Video resolution: {frame_width} x {frame_height}")
 
     # face landmarker options
     base_options = python.BaseOptions(
-        model_asset_path=r'C:\Users\boulosge\Desktop\Acht\Feature_Processing\utils\face_landmarker.task')
+        model_asset_path=os.getenv("MEDIAPIPE_FACE_LANDMARKER_TASK_PATH"))
     options = vision.FaceLandmarkerOptions(
         base_options=base_options,
         output_face_blendshapes=True,
@@ -133,9 +139,9 @@ def compute_video_facial_blendshapes(video_path: str, gloss: str, show_landmarks
     fourcc = cv2.VideoWriter_fourcc(*'avc1')
     video_output_path = None
     if show_landmarks:
-        temp_dir = os.getenv("FACIAL_LANDMARKS_TMP_DIR", "facial_landmarks_tmp")
+        temp_dir = os.getenv("WLASL_MEDIAPIPE_ANNOTATED_VIDEOS")
         os.makedirs(temp_dir, exist_ok=True)
-        video_output_path = os.path.join(temp_dir, f"{video_id}_landmarked.mp4")
+        video_output_path = os.path.join(temp_dir, f"{vid_id_clean}_facemarked.mp4")
         fps = cap.get(cv2.CAP_PROP_FPS)
         if fps == 0 or np.isnan(fps):
             fps = 25
@@ -181,16 +187,11 @@ def compute_video_facial_blendshapes(video_path: str, gloss: str, show_landmarks
     if show_landmarks:
         out.release()
 
-    # print(f"\n🔎 Stats summary:")
-    # print(f"1️⃣ Total frames processed: {total_frames}")
-    # print(f"2️⃣ Number of frames with blendshapes detected: {len(detected_frame_indices)}")
-    # print(f"3️⃣ Indices of frames with detected blendshapes: {detected_frame_indices}")
-
     # -------------------------
     # if no detections at all
     # -------------------------
     if not frames_data:
-        print(f"⚠️ No facial avasag_vitpose_extracted_landmarks detected at all in video {video_id}")
+        print(f"No facial blendshapes detected at all in video {video_id}")
         padded_data = []
         for idx in range(total_frames):
             row = {"frame": idx}
@@ -267,24 +268,23 @@ def summarize_single_video_facial_blendshapes(video_facial_blendshapes_df: pd.Da
 
 
 if __name__ == "__main__":
-    # TESTING ...
-    test_video_path = os.getenv('TEST_VIDEO_PATH')
-    # Test avasag_vitpose_extracted_landmarks extraction
-    facial_blendshapes_df, vis_path, failed = compute_video_facial_blendshapes(test_video_path, "drink", True)
+    # testing blendshapes extraction
+    test_video_path = os.getenv('WLASL_TEST_VIDEO_PATH')
+    facial_blendshapes_df, vis_path, failed = compute_video_facial_blendshapes(test_video_path, os.getenv("WLASL_TEST_VIDEO_GLOSS"), True)
     if not failed:
-        print("✅ Shape of output dataframe:", facial_blendshapes_df.shape)
+        print("Shape of output dataframe:", facial_blendshapes_df.shape)
         print(facial_blendshapes_df.head())
-        # Test returned visualization path
+        # test returned visualization path
         if vis_path and os.path.exists(vis_path):
-            print(f"✅ Landmarked video saved at: {vis_path}")
+            print(f"Landmarked video saved at: {vis_path}")
             # Optional: open with default video player (Windows)
             os.system(f'start {vis_path}')
         else:
-            print("❌ Landmark visualization video not found.")
+            print("Landmark visualization video not found.")
     else:
-        print("❌ Landmark extraction failed.")
+        print("Landmark extraction failed.")
 
-    # Test summarizing avasag_vitpose_extracted_landmarks across frames using stat metrics
+    # test summarizing extracted blendshapes across frames using stat metrics
     vid_landmarks_summary = summarize_single_video_facial_blendshapes(facial_blendshapes_df)
     print(vid_landmarks_summary)
     print(f"Number of padded metrics with -2: {list(vid_landmarks_summary.iloc[0].values).count(-2)}")

@@ -4,8 +4,8 @@ import pandas as pd
 
 def load_existing_ids(parquet_path):
     """
-    :param parquet_path: path to old results file containing avasag_vitpose_extracted_landmarks
-    :return: set of existing ids and all video frames avasag_vitpose_extracted_landmarks as dataframe
+    :param parquet_path: path to old results file containing extracted landmarks
+    :return: set of existing ids and all video frames extracted landmarks as dataframe
     """
     if os.path.exists(parquet_path) and os.path.getsize(parquet_path) > 0:
         df = pd.read_parquet(parquet_path)
@@ -15,9 +15,9 @@ def load_existing_ids(parquet_path):
 
 def save_and_merge(new_df: pd.DataFrame, path: str, existing_df: pd.DataFrame = None):
     """
-    :param new_df: pandas dataframe containing avasag_vitpose_extracted_landmarks/angles
+    :param new_df: pandas dataframe containing extracted landmarks/angles
     :param path: path to save the new dataframe
-    :param existing_df: pandas dataframe containing previously existing avasag_vitpose_extracted_landmarks/angles
+    :param existing_df: pandas dataframe containing previously existing extracted landmarks/angles
     :return:
     """
     if existing_df is not None:
@@ -25,4 +25,3 @@ def save_and_merge(new_df: pd.DataFrame, path: str, existing_df: pd.DataFrame = 
     else:
         combined = new_df
     combined.to_parquet(path, index=False)
-    print(f"✅ Saved to {path}")

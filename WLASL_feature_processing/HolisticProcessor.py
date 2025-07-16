@@ -9,10 +9,10 @@ import mediapipe as mp
 
 class HolisticProcessor:
     """
-    A class to extract and process holistic avasag_vitpose_extracted_landmarks (pose, hands) from videos using MediaPipe Holistic.
+    A class to extract and process landmarks from videos using MediaPipe Holistic.
+    This version returns separate DataFrames for pose, face, and hand landmarks.
 
     Author: George Elswefy (<georgeelswefy@gmail.com>)
-
     """
 
     _landmark_counts = {
@@ -27,12 +27,11 @@ class HolisticProcessor:
         Initializes the HolisticProcessor with environment configurations and MediaPipe setup.
 
         Parameters:
-        - extract (list): Landmark types to extract. Options include 'pose' and 'hand'.
+        - extract (list): Landmark types to extract. Options include 'pose', 'hand' and 'face'.
         """
         if extract is None:
             extract = ["pose", "hand", "face"]
         load_dotenv()
-        # self.window_size = (int(os.getenv("WINDOW_WIDTH")), int(os.getenv("WINDOW_HEIGHT")))
         self.extract = set(extract)
         self.mp_holistic = mp.solutions.holistic
         self.mp_drawing = mp.solutions.drawing_utils
@@ -51,74 +50,42 @@ class HolisticProcessor:
 
     def _generate_column_names(self):
         """
-        Generates column names for the landmark dataframe with body part and index labels.
+        Generates a dictionary of column name lists for each feature set.
 
         Returns:
-        - List[str]: Column names like ['P#0_x', 'P#0_y', ...]
+        - dict: A dictionary like {'pose': [...], 'face': [...], 'hand': [...]}.
         """
-        columns = []
+        columns = {}
         if "pose" in self.extract:
-            for i in range(self._landmark_counts['pose']):
-                columns.extend([f'P#{i}_x', f'P#{i}_y', f'P#{i}_z'])
+            columns['pose'] = [f'P#{i}_{axis}' for i in range(self._landmark_counts['pose']) for axis in
+                               ['x', 'y', 'z']]
         if "hand" in self.extract:
+            hand_cols = []
             for i in range(self._landmark_counts['left_hand']):
-                columns.extend([f'LH#{i}_x', f'LH#{i}_y', f'LH#{i}_z'])
+                hand_cols.extend([f'LH#{i}_x', f'LH#{i}_y', f'LH#{i}_z'])
             for i in range(self._landmark_counts['right_hand']):
-                columns.extend([f'RH#{i}_x', f'RH#{i}_y', f'RH#{i}_z'])
+                hand_cols.extend([f'RH#{i}_x', f'RH#{i}_y', f'RH#{i}_z'])
+            columns['hand'] = hand_cols
         if "face" in self.extract:
-            for i in range(self._landmark_counts['face']):
-                columns.extend([f'F#{i}_x', f'F#{i}_y', f'F#{i}_z'])
+            columns['face'] = [f'F#{i}_{axis}' for i in range(self._landmark_counts['face']) for axis in
+                               ['x', 'y', 'z']]
         return columns
 
-    def _draw_landmarks(self, window_name, frame_rgb, results):
+    def _extract_landmarks_as_dict(self, results, pad_val=-2):
         """
-        Draws holistic avasag_vitpose_extracted_landmarks on the given frame and displays it.
-
-        Parameters:
-        - window_name (str): Name of the display window.
-        - frame_rgb (np.ndarray): The input RGB frame.
-        - results (object): MediaPipe holistic results.
+        Extracts landmarks from MediaPipe results into a dictionary of NumPy arrays.
 
         Returns:
-        - bool: False if ESC key is pressed.
-        """
-        frame_bgr = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR)
-
-        if results.pose_landmarks and "pose" in self.extract:
-            self.mp_drawing.draw_landmarks(frame_bgr, results.pose_landmarks, self.mp_holistic.POSE_CONNECTIONS)
-        if "hand" in self.extract:
-            if results.left_hand_landmarks:
-                self.mp_drawing.draw_landmarks(frame_bgr, results.left_hand_landmarks,
-                                               self.mp_holistic.HAND_CONNECTIONS)
-            if results.right_hand_landmarks:
-                self.mp_drawing.draw_landmarks(frame_bgr, results.right_hand_landmarks,
-                                               self.mp_holistic.HAND_CONNECTIONS)
-        if results.face_landmarks and "face" in self.extract:
-            self.mp_drawing.draw_landmarks(frame_bgr, results.face_landmarks, self.mp_holistic.FACEMESH_TESSELATION)
-
-        cv2.imshow(window_name, frame_bgr)
-        return not (cv2.waitKey(1) & 0xFF == 27)
-
-    def _extract_landmarks_as_nparray(self, results, pad_val=-2):
-        """
-        Extracts avasag_vitpose_extracted_landmarks from MediaPipe results into a flat NumPy array.
-
-        Parameters:
-        - results (object): MediaPipe holistic result.
-        - pad_val (float): Value to fill if avasag_vitpose_extracted_landmarks are not detected.
-
-        Returns:
-        - np.ndarray: Flattened landmark data for one frame.
+        - dict: A dictionary like {'pose': np.ndarray, 'left_hand': np.ndarray, ...}.
         """
 
         def extract(landmarks, count, use_visibility=False, vis_threshold=0.5):
             if not landmarks:
                 return np.full((count, 3), pad_val)
-
             result = []
             for lm in landmarks.landmark:
                 if use_visibility:
-                    # Only used for pose avasag_vitpose_extracted_landmarks
+                    # Only used for pose extracted_landmarks
                     vis = getattr(lm, "visibility", None)
                     if vis is not None and vis < vis_threshold:
                         result.append([pad_val] * 3)
@@ -127,60 +94,52 @@ class HolisticProcessor:
                 else:
                     # For hands/face: visibility is meaningless → just return xyz
                     result.append([lm.x, lm.y, lm.z])
-
             return np.array(result)
 
-        data = []
+        extracted_data = {}
         if "pose" in self.extract:
-            data.append(extract(results.pose_landmarks, self._landmark_counts['pose'], True))
+            extracted_data['pose'] = extract(results.pose_landmarks, self._landmark_counts['pose'], True)
         if "hand" in self.extract:
-            data.append(extract(results.left_hand_landmarks, self._landmark_counts['left_hand'], False))
-            data.append(extract(results.right_hand_landmarks, self._landmark_counts['right_hand'], False))
+            extracted_data['left_hand'] = extract(results.left_hand_landmarks, self._landmark_counts['left_hand'],
+                                                  False)
+            extracted_data['right_hand'] = extract(results.right_hand_landmarks, self._landmark_counts['right_hand'],
+                                                   False)
         if "face" in self.extract:
-            data.append(extract(results.face_landmarks, self._landmark_counts['face']))
-        return np.concatenate(data) if data else np.array([])
+            extracted_data['face'] = extract(results.face_landmarks, self._landmark_counts['face'], False)
+        return extracted_data
 
-    def process_video(self, video_path, show_landmarks=False, gloss=""):
+    def process_video(self, video_path, save_annotation=False, gloss=""):
         """
-        Processes a single video, extracts avasag_vitpose_extracted_landmarks frame-by-frame, and optionally visualizes them.
-
-        Parameters:
-        - video_path (str): Full path to the video.
-        - show_landmarks (bool): Whether to display landmark visualization.
-        - gloss (str): gloss of the video, if provided.
+        Processes a single video and returns separate DataFrames for each feature set.
 
         Returns:
-        - pd.DataFrame: A DataFrame of landmark top_features per frame with header.
+        - tuple: (pose_df, face_df, hand_df, video_output_path)
         """
         cap = cv2.VideoCapture(video_path)
         if not cap.isOpened():
-            print(f"❌ Error: Cannot open video {video_path}")
-            return pd.DataFrame()
+            print(f"Error: Cannot open video {video_path}")
+            return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), None
 
         frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         video_id = os.path.basename(video_path)
-        # fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-        fourcc = cv2.VideoWriter_fourcc(*'avc1')  # H.264
+        clean_video_id = video_id.replace(".mp4", "")
+        fourcc = cv2.VideoWriter_fourcc(*'avc1')
         video_output_path = None
-        if show_landmarks:
-            temp_dir = os.getenv("LANDMARKS_TMP_DIR", "landmarks_tmp")
+        out = None
+
+        if save_annotation:
+            temp_dir = os.getenv("WLASL_MEDIAPIPE_ANNOTATED_VIDEOS")
             os.makedirs(temp_dir, exist_ok=True)
-            video_output_path = os.path.join(temp_dir, f"{video_id}_landmarked.mp4")
-            fps = cap.get(cv2.CAP_PROP_FPS)
-            if fps == 0 or np.isnan(fps):
-                fps = 25  # default fallback
+            video_output_path = os.path.join(temp_dir, f"{clean_video_id}_annotated.mp4")
+            fps = cap.get(cv2.CAP_PROP_FPS) or 25
             frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
             frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
             out = cv2.VideoWriter(video_output_path, fourcc, fps, (frame_width, frame_height))
 
+        # Initialize separate lists for each dataframe
+        pose_data_list, face_data_list, hand_data_list = [], [], []
 
-
-
-
-
-        frames_data = []
-        with tqdm(total=frame_count, desc=f"Processing <{video_id}> for gloss '{gloss}'", unit='frame', colour='white',
-                  leave=False) as pbar:
+        with tqdm(total=frame_count, desc=f"Processing <{video_id}>", unit='frame') as pbar:
             while True:
                 success, frame = cap.read()
                 if not success:
@@ -188,52 +147,57 @@ class HolisticProcessor:
 
                 image_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 results = self.holistic.process(image_rgb)
-                frame_features = self._extract_landmarks_as_nparray(results)
-                if frame_features.size:
-                    frames_data.append(frame_features.flatten())
 
-                if show_landmarks:
+                landmark_dict = self._extract_landmarks_as_dict(results)
+
+                # Append flattened data to the correct list
+                if 'pose' in landmark_dict:
+                    pose_data_list.append(landmark_dict['pose'].flatten())
+                if 'face' in landmark_dict:
+                    face_data_list.append(landmark_dict['face'].flatten())
+                if 'left_hand' in landmark_dict and 'right_hand' in landmark_dict:
+                    combined_hand = np.concatenate([landmark_dict['left_hand'], landmark_dict['right_hand']])
+                    hand_data_list.append(combined_hand.flatten())
+
+                if save_annotation and out:
+                    # Drawing logic remains the same
                     frame_bgr = cv2.cvtColor(image_rgb, cv2.COLOR_RGB2BGR)
                     if results.pose_landmarks and "pose" in self.extract:
                         self.mp_drawing.draw_landmarks(frame_bgr, results.pose_landmarks,
                                                        self.mp_holistic.POSE_CONNECTIONS)
                     if "hand" in self.extract:
-                        if results.left_hand_landmarks:
-                            self.mp_drawing.draw_landmarks(frame_bgr, results.left_hand_landmarks,
-                                                           self.mp_holistic.HAND_CONNECTIONS)
-                        if results.right_hand_landmarks:
-                            self.mp_drawing.draw_landmarks(frame_bgr, results.right_hand_landmarks,
-                                                           self.mp_holistic.HAND_CONNECTIONS)
+                        if results.left_hand_landmarks: self.mp_drawing.draw_landmarks(frame_bgr,
+                                                                                       results.left_hand_landmarks,
+                                                                                       self.mp_holistic.HAND_CONNECTIONS)
+                        if results.right_hand_landmarks: self.mp_drawing.draw_landmarks(frame_bgr,
+                                                                                        results.right_hand_landmarks,
+                                                                                        self.mp_holistic.HAND_CONNECTIONS)
                     if results.face_landmarks and "face" in self.extract:
                         self.mp_drawing.draw_landmarks(frame_bgr, results.face_landmarks,
                                                        self.mp_holistic.FACEMESH_TESSELATION)
-
                     out.write(frame_bgr)
-
 
                 pbar.update(1)
 
         cap.release()
-
-        if show_landmarks:
+        if out:
             out.release()
 
-
-        if not frames_data:
-            print(f"⚠️ No avasag_vitpose_extracted_landmarks detected in video {video_id}")
-            return pd.DataFrame()
-
-        column_names = self._generate_column_names()
-        df = pd.DataFrame(frames_data, columns=column_names)
+        # Generate DataFrames from the collected lists
+        column_map = self._generate_column_names()
         vid_id_clean = video_id.split(".")[0]
-        df.insert(0, 'video_id', vid_id_clean)
-        if gloss:
-            df.insert(1, 'gloss', gloss)
-        else:
-            df.insert(1, 'gloss', "nil")
 
+        def create_df(data_list, columns, name):
+            if not data_list:
+                print(f"No {name} landmarks detected in video {video_id}")
+                return pd.DataFrame()
+            df = pd.DataFrame(data_list, columns=columns)
+            df.insert(0, 'video_id', vid_id_clean)
+            df.insert(1, 'gloss', gloss or "nil")
+            return df
 
-        # return df
-        return df, video_output_path if show_landmarks else (df, None)
+        pose_df = create_df(pose_data_list, column_map.get('pose', []), 'pose')
+        face_df = create_df(face_data_list, column_map.get('face', []), 'face')
+        hand_df = create_df(hand_data_list, column_map.get('hand', []), 'hand')
 
-
+        return pose_df, face_df, hand_df, video_output_path

@@ -83,8 +83,8 @@
 #
 #         # 3. Load and merge the required Parquet files
 #         feature_paths = {
-#             "pose_landmarks": pose_landmark_path, "face_landmarks": face_landmark_path,
-#             "hand_landmarks": hand_landmark_path, "pose_angles": pose_angle_path,
+#             "pose_landmarks": pose_landmark_path, "face_landmarks.parquet": face_landmark_path,
+#             "hand_landmarks.parquet": hand_landmark_path, "pose_angles": pose_angle_path,
 #             "hand_angles": hand_angle_path
 #         }
 #
@@ -116,7 +116,7 @@
 #                 ranked_features = TOP_POSE_ANGLES
 #             elif self.features_type == "hand_pose_angles":
 #                 ranked_features = TOP_HAND_ANGLES + TOP_POSE_ANGLES
-#             elif self.features_type == "hand_landmarks":
+#             elif self.features_type == "hand_landmarks.parquet":
 #                 ranked_features = TOP_HAND_LANDMARKS
 #             elif self.features_type == "pose_landmarks":
 #                 ranked_features = TOP_POSE_LANDMARKS
@@ -173,7 +173,7 @@
 #             metadata_json_path (str): Path to the main metadata JSON file.
 #             split (str): The dataset split to use ('train', 'val', or 'test').
 #             top_features (str): The feature group to load. Options include:
-#                             'pose_landmarks', 'hand_landmarks', 'face_landmarks',
+#                             'pose_landmarks', 'hand_landmarks.parquet', 'face_landmarks.parquet',
 #                             'pose_angles', 'hand_angles', or combinations joined by '_'.
 #                             Example: 'hand_pose_landmarks'.
 #             max_len (int, optional): The maximum sequence length. Sequences will be
@@ -223,15 +223,15 @@
 #         files_to_load = {}
 #         if "avasag_vitpose_extracted_landmarks" in self.features_type:
 #             if "pose" in self.features_type: files_to_load['pose_landmarks'] = 'POSE_LANDMARKS.parquet'
-#             if "hand" in self.features_type: files_to_load['hand_landmarks'] = 'HAND_LANDMARKS.parquet'
-#             if "face" in self.features_type: files_to_load['face_landmarks'] = 'FACE_LANDMARKS.parquet'
+#             if "hand" in self.features_type: files_to_load['hand_landmarks.parquet'] = 'HAND_LANDMARKS.parquet'
+#             if "face" in self.features_type: files_to_load['face_landmarks.parquet'] = 'FACE_LANDMARKS.parquet'
 #         if "angles" in self.features_type:
 #             if "pose" in self.features_type: files_to_load['pose_angles'] = 'POSE_ANGLES.parquet'
 #             if "hand" in self.features_type: files_to_load['hand_angles'] = 'HAND_ANGLES.parquet'
 #
 #         # Always include face avasag_vitpose_extracted_landmarks as a base if any landmark type is requested
 #         if "avasag_vitpose_extracted_landmarks" in self.features_type:
-#             files_to_load['face_landmarks'] = 'FACE_LANDMARKS.parquet'
+#             files_to_load['face_landmarks.parquet'] = 'FACE_LANDMARKS.parquet'
 #
 #         if not files_to_load:
 #             raise ValueError(f"Invalid 'top_features' argument: '{top_features}'. No data files to load.")
@@ -260,9 +260,9 @@
 #         cols_to_keep = []
 #         if "pose_landmarks" in self.features_type:
 #             cols_to_keep.extend([c for c in features_df.columns if c.startswith('p_')])
-#         if "hand_landmarks" in self.features_type:
+#         if "hand_landmarks.parquet" in self.features_type:
 #             cols_to_keep.extend([c for c in features_df.columns if c.startswith('h_')])
-#         if "face_landmarks" in self.features_type:
+#         if "face_landmarks.parquet" in self.features_type:
 #             cols_to_keep.extend([c for c in features_df.columns if c.startswith('f_')])
 #         if "pose_angles" in self.features_type:
 #             # Assuming angle columns are named like 'angle_l_shoulder_...'
