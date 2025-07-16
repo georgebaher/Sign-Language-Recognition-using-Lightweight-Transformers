@@ -6,5 +6,5 @@ avasag_frames_folder/
 avasag_videos/
 annotated_videos/
 data_parquet/
-
+avasag_metadata.json
 
