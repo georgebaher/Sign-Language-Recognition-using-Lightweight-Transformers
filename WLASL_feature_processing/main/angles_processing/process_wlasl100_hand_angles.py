@@ -1,4 +1,8 @@
 import os
+import sys
+sys.path.append('')
+sys.path.append('..')
+sys.path.append('../../')
 import json
 import time
 import pandas as pd
@@ -16,14 +20,13 @@ metadata_path = os.getenv("WLASL_METADATA_PATH")
 hands_landmarks_path = os.getenv("WLASL100_HAND_LANDMARKS_PATH")
 output_path = os.getenv("WLASL100_HAND_ANGLES_PATH")
 
-# Load wlasl_csv_exports + avasag_vitpose_extracted_landmarks
 with open(metadata_path) as f:
     glosses = json.load(f)[:100]
 hands_landmarks_df = pd.read_parquet(hands_landmarks_path)
 
 # Load already processed
 processed_ids, existing_df = load_existing_ids(output_path)
-print(f"✅ {len(processed_ids)} videos already processed. Skipping those.")
+print(f"{len(processed_ids)} videos already processed. Skipping those.")
 
 # Prepare output and trackers
 skipped_videos, failed_videos, processed_videos = [], [], []
@@ -42,12 +45,12 @@ for gloss in tqdm(glosses, desc="Glosses", unit='glosss', colour='green'):
         try:
             df = compute_hand_angles(hands_landmarks_df, video_id, gloss_label)
             if df.empty:
-                print(f"⚠️ Skipping empty video_id: {video_id}")
+                print(f"Skipping empty video_id: {video_id}")
                 continue
             all_dfs.append(df)
             processed_videos.append(video_id)
         except Exception as e:
-            print(f"❌ Error in video {video_id}: {e}")
+            print(f"Error in video {video_id}: {e}")
             failed_videos.append(video_id)
 
 # Save results
@@ -55,17 +58,17 @@ if all_dfs:
     final_df = pd.concat(all_dfs, ignore_index=True)
     save_and_merge(final_df, output_path, existing_df)
 else:
-    print("⚠️ No new rows to save.")
+    print("No new rows to save.")
 
 # Save failure log
 if failed_videos:
-    with open("data/failed_hand_videos.txt", "w") as f:
+    with open("failed_hand_videos.txt", "w") as f:
         f.writelines([str(v) + "\n" for v in set(failed_videos)])
 
 # Summary
 end = time.time()
-print(f"\n📊 Summary")
-print(f"🕒 Time elapsed: {round(end - start, 2)} sec")
-print(f"🟢 Processed videos: {len(set(processed_videos))}")
-print(f"⏭️ Skipped (already processed): {len(set(skipped_videos))}")
-print(f"❌ Failed videos: {len(set(failed_videos))}")
+print(f"\nSummary")
+print(f"Time elapsed: {round(end - start, 2)} sec")
+print(f"Processed videos: {len(set(processed_videos))}")
+print(f"Skipped (already processed): {len(set(skipped_videos))}")
+print(f"Failed videos: {len(set(failed_videos))}")
