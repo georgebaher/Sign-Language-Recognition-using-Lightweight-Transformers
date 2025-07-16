@@ -8,8 +8,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # --- Load the Parquet file ---
-wlasl100_pose_landmarks_path = os.getenv("WLASL100_POSE_LANDMARKS_PATH")
-df = pd.read_parquet(wlasl100_pose_landmarks_path)
+wlasl100_hand_landmarks_path = os.getenv("WLASL100_FACE_LANDMARKS_PATH")
+df = pd.read_parquet(wlasl100_hand_landmarks_path)
 
 # --- Load metadata and filter to first 100 glosses ---
 with open(os.getenv("WLASL_METADATA_PATH"), "r") as f:
@@ -30,7 +30,7 @@ for gloss in tqdm(glosses, unit="gloss", total=len(glosses), leave=False, colour
 # --- Concatenate and save ---
 final_summary_df = pd.concat(all_instances_summary, ignore_index=True)
 
-output_path = os.getenv("WLASL100_POSE_LANDMARKS_SUMMARY_PATH")
+output_path = os.getenv("WLASL100_FACE_LANDMARKS_SUMMARY_PATH")
 final_summary_df.to_parquet(output_path, index=False)
 
-print(f"Saved summarized pose landmarks to {output_path}")
+print(f"Saved summarized face landmarks to {output_path}")

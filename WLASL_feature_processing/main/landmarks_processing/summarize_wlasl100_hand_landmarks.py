@@ -33,4 +33,4 @@ final_summary_df = pd.concat(all_instances_summary, ignore_index=True)
 output_path = os.getenv("WLASL100_HAND_LANDMARKS_SUMMARY_PATH")
 final_summary_df.to_parquet(output_path, index=False)
 
-print(f"✅ Saved summarized hand landmarks to {output_path}")
+print(f"Saved summarized hand landmarks to {output_path}")
