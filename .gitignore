@@ -1,10 +1,14 @@
 .idea/
 __pycache__/
-ViTPose/
-start_kit/
-avasag_frames_folder/
-avasag_videos/
-annotated_videos/
-data_parquet/
-avasag_metadata.json
 
+ViTPose/
+
+*.parquet
+*.mp4
+*.png
+*.jpg
+*.txt
+*.pdf
+*.xlsx
+*.csv
+*.json
