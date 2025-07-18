@@ -22,7 +22,7 @@
 #     A PyTorch Dataset for loading AVASign100 landmark data stored in Parquet files.
 #
 #     This class loads and combines data from separate Parquet files for pose, face,
-#     and hand avasag_vitpose_extracted_landmarks and/or angles. It handles metadata for splits, feature selection,
+#     and hand landmarks and/or angles. It handles metadata for splits, feature selection,
 #     and padding for use in a Transformer model.
 #     """
 #
@@ -125,7 +125,7 @@
 #             else:
 #                 raise ValueError(f"[ERROR] Unknown feature selection group: {self.features_type}")
 #
-#             if "avasag_vitpose_extracted_landmarks" in self.features_type:
+#             if "landmarks" in self.features_type:
 #                 cols_to_keep = []
 #                 for base in ranked_features:
 #                     cols_to_keep.extend([f"{base}_x", f"{base}_y"])
@@ -221,7 +221,7 @@
 #
 #         # Determine which files to load based on the requested top_features
 #         files_to_load = {}
-#         if "avasag_vitpose_extracted_landmarks" in self.features_type:
+#         if "landmarks" in self.features_type:
 #             if "pose" in self.features_type: files_to_load['pose_landmarks'] = 'POSE_LANDMARKS.parquet'
 #             if "hand" in self.features_type: files_to_load['hand_landmarks.parquet'] = 'HAND_LANDMARKS.parquet'
 #             if "face" in self.features_type: files_to_load['face_landmarks.parquet'] = 'FACE_LANDMARKS.parquet'
@@ -229,8 +229,8 @@
 #             if "pose" in self.features_type: files_to_load['pose_angles'] = 'POSE_ANGLES.parquet'
 #             if "hand" in self.features_type: files_to_load['hand_angles'] = 'HAND_ANGLES.parquet'
 #
-#         # Always include face avasag_vitpose_extracted_landmarks as a base if any landmark type is requested
-#         if "avasag_vitpose_extracted_landmarks" in self.features_type:
+#         # Always include face landmarks as a base if any landmark type is requested
+#         if "landmarks" in self.features_type:
 #             files_to_load['face_landmarks.parquet'] = 'FACE_LANDMARKS.parquet'
 #
 #         if not files_to_load:

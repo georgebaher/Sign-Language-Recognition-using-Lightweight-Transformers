@@ -11,8 +11,8 @@ import pandas as pd
 import json
 import numpy as np
 from WLASL_feature_processing.feature_selection.top_features.hand_angles_features import TOP_ANGLE_BASES as hand_angles
-from WLASL_feature_processing.feature_selection.top_features.hand_landmarks_features import TOP_LANDMARKS_BASES as hand_landmarks
-from WLASL_feature_processing.feature_selection.top_features.pose_landmarks_features import TOP_LANDMARKS_BASES as pose_landmarks
+from WLASL_feature_processing.top_features.hand_landmarks_features import TOP_LANDMARKS_BASES as hand_landmarks
+from WLASL_feature_processing.top_features.pose_landmarks_features import TOP_LANDMARKS_BASES as pose_landmarks
 from WLASL_feature_processing.feature_selection.top_features.pose_angles_features import TOP_ANGLE_BASES as pose_angles
 
 
@@ -96,7 +96,7 @@ class WLASLParquetDataset(Dataset):
             else:
                 raise ValueError(f"[ERROR] Unknown feature selection group: {self.features_type}")
 
-            if "avasag_vitpose_extracted_landmarks" in self.features_type:
+            if "landmarks" in self.features_type:
                 body_cols_to_keep = []
                 for base in ranked_features:
                     body_cols_to_keep.extend([f"{base}_x", f"{base}_y"])
@@ -125,7 +125,7 @@ class WLASLParquetDataset(Dataset):
             return False
 
         body_cols_to_keep = [c for c in body_cols_to_keep if not is_forbidden_pose_column(c)]
-        if "avasag_vitpose_extracted_landmarks" in self.features_type:
+        if "landmarks" in self.features_type:
             body_cols_to_keep = [c for c in body_cols_to_keep if not c.endswith("_z")]
 
         # 4. Create the final combined list of columns

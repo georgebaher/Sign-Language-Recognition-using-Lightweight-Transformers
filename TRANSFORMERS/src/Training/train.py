@@ -1,3 +1,4 @@
+import argparse
 import logging
 import os
 import random
@@ -25,11 +26,10 @@ sys.path.append('')
 sys.path.append('..')
 sys.path.append('../../')
 sys.path.append('../../../TRANSFORMER_SAMPLE_2/')
-from src.utils.args_utils import *
 from src.Training.trainingUtils.utils import train_epoch_batch, evaluate_batch
 ### MODIFIED: Import both dataset classes ###
-from src.Training.dataloader.features_dataloader import WLASLParquetDataset
-from src.Training.dataloader.blendshapes_dataloader import WLASLBlendshapesDataset
+from src.Training.WLASL_dataloader.features_dataloader import WLASLParquetDataset
+from src.Training.WLASL_dataloader.blendshapes_dataloader import WLASLBlendshapesDataset
 from src.Training.models.BaselineTransformerClassification import BaselineTransformerClassification
 from src.Training.models.SPOTER import SPOTERTransformer
 from src.Training.models.LSTM import LSTMClassifier
@@ -88,7 +88,7 @@ def get_default_args():
 
     # Landmarks library
     parser.add_argument("--mediapipe_holistic", type=str, default='True',
-                        help="Determines whether the avasag_vitpose_extracted_landmarks were generated using MediaPipe or other")
+                        help="Determines whether the extracted landmarks were generated using MediaPipe or other")
 
     parser.add_argument("--padding", type=str, default='True',
                         help="Determines whether the missing top_features were padded in top_features extractions or not")
@@ -159,7 +159,7 @@ def train(args):
     clip_weights = args.clip_weights
     clip_gradients = args.clip_gradients
     transform = args.transform
-    features = args.features
+    features = args.top_features
     include_blendshapes = args.include_blendshapes
     fs = args.fs
     feature_padding_mode = args.feature_padding_mode
@@ -244,6 +244,7 @@ def train(args):
                 "HAND_POSE_ANGLES": "WLASL100_HAND_POSE_ANGLES_PATH",
             }
             body_features_parquet_env_var = feature_parquet_map.get(features.upper())
+            print(body_features_parquet_env_var)
             if body_features_parquet_env_var is None:
                 raise ValueError(f"Unknown feature type: {features}")
             body_features_parquet_path = os.getenv(body_features_parquet_env_var)
@@ -255,7 +256,7 @@ def train(args):
                 "facial_blendshapes_parquet_path": facial_blendshapes_parquet_path,
                 "metadata_json_path": metadata_path,
                 "transform": None,
-                "top_features": features,
+                "features": features,
                 "include_blendshapes": include_blendshapes,
                 "fs": fs,
                 "feature_padding_mode": feature_padding_mode,

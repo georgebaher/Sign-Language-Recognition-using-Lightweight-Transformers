@@ -10,8 +10,8 @@ from dotenv import load_dotenv
 # ------------------ PLOT FUNCTION ------------------
 def plot_landmarks(feature_tensor: torch.Tensor, save_path="tmp/output.mp4", width=512, height=512, fps=25):
     """
-    Render avasag_vitpose_extracted_landmarks on a white background and save as video.
-    Skips padded frames (-2) and padded avasag_vitpose_extracted_landmarks (-2).
+    Render landmarks on a white background and save as video.
+    Skips padded frames (-2) and padded landmarks (-2).
     """
 
     POSE_CONNECTIONS = [
@@ -37,7 +37,7 @@ def plot_landmarks(feature_tensor: torch.Tensor, save_path="tmp/output.mp4", wid
 
     writer = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (width, height))
 
-    ###### Prepare avasag_vitpose_extracted_landmarks ######
+    ###### Prepare landmarks ######
     seq_len, _ = feature_tensor.shape
 
     n_axis = 2  # x and y only
@@ -128,8 +128,8 @@ def main():
         decoded_labels = [(idx.item(), dataset.idx2gloss[idx.item()]) for idx in labels]
         print("Labels:", decoded_labels)
 
-        # Visualize the first sample from first batch if top_features are avasag_vitpose_extracted_landmarks and feature selection is off
-        if "avasag_vitpose_extracted_landmarks" in args["top_features"].lower().split("_") and args["fs"] == 0:
+        # Visualize the first sample from first batch if top_features are landmarks and feature selection is off
+        if "landmarks" in args["top_features"].lower().split("_") and args["fs"] == 0:
             for idx, feature_tensor in enumerate(features[:3]):
                 plot_landmarks(feature_tensor, f'tmp/{decoded_labels[idx][1]}_batch_{i}_idx_{idx}.mp4')
         if i == 0:

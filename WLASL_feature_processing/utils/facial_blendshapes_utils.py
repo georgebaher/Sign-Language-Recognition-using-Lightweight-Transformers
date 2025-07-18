@@ -135,7 +135,7 @@ def compute_video_facial_blendshapes(video_path: str, gloss: str, show_landmarks
     )
     detector = vision.FaceLandmarker.create_from_options(options)
 
-    # video output if avasag_vitpose_extracted_landmarks shown
+    # video output if landmarks shown
     fourcc = cv2.VideoWriter_fourcc(*'avc1')
     video_output_path = None
     if show_landmarks:
