@@ -12,3 +12,5 @@ ViTPose/
 *.xlsx
 *.csv
 *.json
+*.pth
+*.log
