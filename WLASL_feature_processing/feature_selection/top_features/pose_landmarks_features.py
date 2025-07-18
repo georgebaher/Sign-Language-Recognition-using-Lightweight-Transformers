@@ -1,4 +1,5 @@
-TOP_LANDMARKS_BASES = [
+# This file was automatically generated for 'pose landmarks'
+TOP_FEATURES = [
     "P#16",
     "P#22",
     "P#17",
