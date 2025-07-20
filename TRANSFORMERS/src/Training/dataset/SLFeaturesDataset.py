@@ -27,7 +27,7 @@ class SignLanguageFeaturesDataset(Dataset):
                  features: List[str],
                  feature_selection_dir: str = None,
                  pose_landmark_path: str = None, face_landmark_path: str = None, hand_landmark_path: str = None,
-                 pose_angle_path: str = None, hand_angle_path: str = None, facial_blendshape_path: str = None,
+                 pose_angle_path: str = None, hand_angle_path: str = None, face_blendshape_path: str = None,
                  split: str = "train",
                  n_glosses: int = None,
                  fs: int = 0,
@@ -72,7 +72,7 @@ class SignLanguageFeaturesDataset(Dataset):
         feature_paths = {
             "pose_landmarks": pose_landmark_path, "face_landmarks": face_landmark_path,
             "hand_landmarks": hand_landmark_path, "pose_angles": pose_angle_path,
-            "hand_angles": hand_angle_path, "facial_blendshapes": facial_blendshape_path
+            "hand_angles": hand_angle_path, "face_blendshapes": face_blendshape_path
         }
 
         valid_features = list(feature_paths.keys())
@@ -111,23 +111,25 @@ class SignLanguageFeaturesDataset(Dataset):
             print(f"Applying feature selection from: {feature_selection_dir}")
             ranked_features = {}
             sys.path.insert(0, feature_selection_dir)
+            modules_to_delete = []
             try:
-                if "hand_angles" in self.features: ranked_features['hand_angles'] = import_module(
-                    "hand_angles_features").TOP_FEATURES
-                if "pose_angles" in self.features: ranked_features['pose_angles'] = import_module(
-                    "pose_angles_features").TOP_FEATURES
-                if "hand_landmarks" in self.features: ranked_features['hand_landmarks'] = import_module(
-                    "hand_landmarks_features").TOP_FEATURES
-                if "pose_landmarks" in self.features: ranked_features['pose_landmarks'] = import_module(
-                    "pose_landmarks_features").TOP_FEATURES
-                if "face_landmarks" in self.features: ranked_features['face_landmarks'] = import_module(
-                    "face_landmarks_features").TOP_FEATURES
-                if "facial_blendshapes" in self.features: ranked_features['facial_blendshapes'] = import_module(
-                    "facial_blendshapes_features").TOP_FEATURES
-            except ImportError as e:
-                print(f"Warning: Could not import a feature file from '{feature_selection_dir}'. Error: {e}")
+                feature_files = {
+                    "hand_angles": "hand_angles_features", "pose_angles": "pose_angles_features",
+                    "hand_landmarks": "hand_landmarks_features", "pose_landmarks": "pose_landmarks_features",
+                    "face_landmarks": "face_landmarks_features", "face_blendshapes": "face_blendshapes_features"
+                }
+                for feature_name, module_name in feature_files.items():
+                    if feature_name in self.features:
+                        module = import_module(module_name)
+                        ranked_features[feature_name] = module.TOP_FEATURES
+                        modules_to_delete.append(module_name)
             finally:
-                sys.path.pop(0)
+                # --- Clean up both sys.path and sys.modules ---
+                if feature_selection_dir in sys.path:
+                    sys.path.remove(feature_selection_dir)
+                for module_name in modules_to_delete:
+                    if module_name in sys.modules:
+                        del sys.modules[module_name]
 
             temp_cols = []
             # Handle landmarks by expanding base names to _x and _y
@@ -138,7 +140,7 @@ class SignLanguageFeaturesDataset(Dataset):
             # Handle angles and blendshapes, which are single columns
             temp_cols.extend(ranked_features.get("hand_angles", []))
             temp_cols.extend(ranked_features.get("pose_angles", []))
-            temp_cols.extend(ranked_features.get("facial_blendshapes", []))
+            temp_cols.extend(ranked_features.get("face_blendshapes", []))
 
             # Filter initial_cols to only keep those selected
             cols_to_keep = [col for col in initial_cols if col in temp_cols]
