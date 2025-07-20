@@ -230,42 +230,6 @@ def compute_video_facial_blendshapes(video_path: str, gloss: str, show_landmarks
 
     return final_df, video_output_path, False
 
-def summarize_single_video_facial_blendshapes(video_facial_blendshapes_df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Summarizes one video's frame-wise facial blendshapes into a single-row DataFrame, ignoring -2 (missing) values.
-
-    :param video_facial_blendshapes_df: Frame-wise blendshapes data for a single video
-    :return: DataFrame with one row of video-level statistical top_features
-    """
-    video_id = video_facial_blendshapes_df['video_id'].iloc[0]
-    gloss = video_facial_blendshapes_df['gloss'].iloc[0]
-
-    feature_cols = [col for col in video_facial_blendshapes_df.columns if col not in ['video_id', 'gloss']]
-    summary_data = {
-        'video_id': video_id,
-        'gloss': gloss
-    }
-
-    for col in feature_cols:
-        values = video_facial_blendshapes_df[col].astype(float).values
-        valid_values = values[values != -2]
-
-        if len(valid_values) == 0:
-            # All values were missing, pad with NaN
-            summary_data[f"{col}_mean"] = -2
-            summary_data[f"{col}_std"] = -2
-            summary_data[f"{col}_min"] = -2
-            summary_data[f"{col}_max"] = -2
-            summary_data[f"{col}_var"] = -2
-        else:
-            summary_data[f"{col}_mean"] = np.mean(valid_values)
-            summary_data[f"{col}_std"] = np.std(valid_values)
-            summary_data[f"{col}_min"] = np.min(valid_values)
-            summary_data[f"{col}_max"] = np.max(valid_values)
-            summary_data[f"{col}_var"] = np.var(valid_values)
-
-    return pd.DataFrame([summary_data])
-
 
 if __name__ == "__main__":
     # testing blendshapes extraction
@@ -283,8 +247,3 @@ if __name__ == "__main__":
             print("Landmark visualization video not found.")
     else:
         print("Landmark extraction failed.")
-
-    # test summarizing extracted blendshapes across frames using stat metrics
-    vid_landmarks_summary = summarize_single_video_facial_blendshapes(facial_blendshapes_df)
-    print(vid_landmarks_summary)
-    print(f"Number of padded metrics with -2: {list(vid_landmarks_summary.iloc[0].values).count(-2)}")

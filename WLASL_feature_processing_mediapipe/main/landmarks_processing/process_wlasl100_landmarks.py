@@ -10,8 +10,8 @@ sys.path.append('..')
 sys.path.append('../../')
 
 # Assuming these are in a utils folder as per your original structure
-from WLASL_feature_processing.utils.landmarks_utils import compute_video_landmarks
-from WLASL_feature_processing.utils.io_utils import load_existing_ids, save_and_merge
+from WLASL_feature_processing_mediapipe.utils.landmarks_utils import compute_video_landmarks
+from WLASL_feature_processing_mediapipe.utils.io_utils import load_existing_ids, save_and_merge
 
 # Start timer
 start = time.time()

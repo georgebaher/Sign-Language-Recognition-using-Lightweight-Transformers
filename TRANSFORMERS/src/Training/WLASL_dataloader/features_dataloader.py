@@ -10,10 +10,10 @@ from torch.utils.data import Dataset
 import pandas as pd
 import json
 import numpy as np
-from WLASL_feature_processing.feature_selection.top_features.hand_angles_features import TOP_ANGLE_BASES as hand_angles
-from WLASL_feature_processing.top_features.hand_landmarks_features import TOP_LANDMARKS_BASES as hand_landmarks
-from WLASL_feature_processing.top_features.pose_landmarks_features import TOP_LANDMARKS_BASES as pose_landmarks
-from WLASL_feature_processing.feature_selection.top_features.pose_angles_features import TOP_ANGLE_BASES as pose_angles
+from WLASL_feature_processing_mediapipe.feature_selection.top_features.hand_angles_features import TOP_ANGLE_BASES as hand_angles
+from WLASL_feature_processing_mediapipe.top_features.hand_landmarks_features import TOP_LANDMARKS_BASES as hand_landmarks
+from WLASL_feature_processing_mediapipe.top_features.pose_landmarks_features import TOP_LANDMARKS_BASES as pose_landmarks
+from WLASL_feature_processing_mediapipe.feature_selection.top_features.pose_angles_features import TOP_ANGLE_BASES as pose_angles
 
 
 class WLASLParquetDataset(Dataset):
