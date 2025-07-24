@@ -1,4 +1,4 @@
-# sign_language_dataset.py (Final, Production-Ready Version)
+# SignLanguageFeaturesDataset.py
 #
 # A fully generalizable PyTorch Dataset for loading sign language features.
 # It dynamically imports top feature lists for dataset-specific feature selection
@@ -103,7 +103,7 @@ class SignLanguageFeaturesDataset(Dataset):
         features_df.fillna(-2, inplace=True)
 
         # 4. Determine the final list of feature columns
-        final_id_cols = ['video_id', 'gloss', 'frame_idx', 'hand']
+        final_id_cols = ['video_id', 'gloss', 'frame_idx']
         initial_cols = [col for col in features_df.columns if col not in final_id_cols]
 
         cols_to_keep = initial_cols

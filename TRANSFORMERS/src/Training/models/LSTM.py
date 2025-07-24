@@ -3,10 +3,9 @@ import torch.nn as nn
 
 
 class LSTMClassifier(nn.Module):
-    def __init__(self, input_dim, hidden_dim, n_heads, num_classes, num_layers=1, dropout=0.0):
+    def __init__(self, input_dim, hidden_dim, num_classes, num_layers=1, dropout=0.0):
         super(LSTMClassifier, self).__init__()
         self.hidden_dim = hidden_dim
-        self.n_heads = n_heads
         self.lstm = nn.LSTM(input_dim, hidden_dim, num_layers=num_layers,
                             batch_first=True, bidirectional=False, dropout=dropout)
         self.classifier = nn.Linear(hidden_dim, num_classes)
