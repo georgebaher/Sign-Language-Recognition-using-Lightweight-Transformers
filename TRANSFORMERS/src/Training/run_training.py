@@ -60,7 +60,8 @@ def get_args_parser():
     parser = argparse.ArgumentParser("Sign Language Transformer Training", add_help=False)
     parser.add_argument("--experiment_name", type=str, default='SLR_Experiment')
     parser.add_argument("--seed", type=int, default=379)
-    parser.add_argument("--dataset_name", type=str, default="WLASL", choices=["WLASL", "AVASAG"])
+    parser.add_argument("--dataset_name", type=str, default="wlasl", choices=["wlasl", "avasag"])
+    parser.add_argument("--feature_extraction_model", type=str, default="vitpose", choices=["vitpose", "mediapipe"])
     parser.add_argument("--n_glosses", type=int, default=100)
     parser.add_argument("--features", nargs='+', required=True)
     parser.add_argument("--fs", type=int, default=0)
@@ -110,8 +111,8 @@ def train(args):
     for key, value in sorted(vars(args).items()): logger.info(f"  > {key}: {value}")
 
     load_dotenv()
-    base_path = os.getenv(f"{args.dataset_name.upper()}_BASE_PATH")
-    fs_dir = os.getenv(f"{args.dataset_name.upper()}_TOP_FEATURES_DIR")
+    base_path = os.getenv(f"{args.dataset_name.upper()}_{args.feature_extraction_model.upper()}_BASE_PATH")
+    fs_dir = os.getenv(f"{args.dataset_name.upper()}_{args.feature_extraction_model.upper()}_TOP_FEATURES_DIR")
 
     dataloader_args = {
         "metadata_json_path": os.getenv(f"{args.dataset_name.upper()}_METADATA_PATH"),
@@ -123,7 +124,7 @@ def train(args):
         "face_landmark_path": os.path.join(base_path, "FACE_LANDMARKS.parquet"),
         "pose_angle_path": os.path.join(base_path, "POSE_ANGLES.parquet"),
         "hand_angle_path": os.path.join(base_path, "HAND_ANGLES.parquet"),
-        "face_blendshape_path": os.path.join(base_path, "FACIAL_BLENDSHAPES.parquet"),
+        "face_blendshape_path": os.path.join(base_path, "FACE_BLENDSHAPES.parquet"),
     }
 
     logger.info("\n--- Loading Datasets ---")

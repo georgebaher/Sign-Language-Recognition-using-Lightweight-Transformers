@@ -58,7 +58,7 @@ def main():
     parser.add_argument('--body_part', type=str, required=True, choices=['pose', 'hand'],
                         help="The body part to process ('pose' or 'hand').")
     parser.add_argument('--num_landmarks', type=int, required=True,
-                        help="Number of landmarks PER SET (e.g., 21 for one hand, 25 for upper-body pose).")
+                        help="Number of landmarks PER SET (e.g., 21 for one hand, 25 for upper-body pose if by mediapipe or 13 if by vitpose).")
     parser.add_argument('--start_col', type=int, required=True, help="The starting column index of the landmark data.")
     args = parser.parse_args()
 
