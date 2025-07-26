@@ -79,12 +79,26 @@ def evaluate_batch(model, loss_fn, dataloader, device, return_preds=False):
     with torch.no_grad():  # Disable gradient calculations for efficiency
         for i, data in enumerate(dataloader):
             batch, labels = data
+
+            # --- START DEBUGGING BLOCK ---
+            # Create the same pad mask that the model will see
+            # Here batch_data is the raw data from the loader, before it goes to the model
+            pad_mask = (batch == -2).all(dim=-1)  # Shape: [B, T]
+            # Check if any sequence in the batch is fully padded
+            is_fully_padded = pad_mask.all(dim=1)  # Shape: [B]
+            if is_fully_padded.any():
+                print(f"[WARNING] Found fully padded sequence(s) in validation batch {i} !")
+                # You can even find which sample in the batch it is
+                problem_indices = torch.where(is_fully_padded)[0]
+                print(f"[WARNING] ... Indices in batch: {problem_indices.tolist()}")
+            # --- END DEBUGGING BLOCK ---
+
             batch = batch.to(device)
             labels = labels.to(device, dtype=torch.long)
 
             outputs = model(batch)
             outs_squeeze = outputs.squeeze(1)
-
+            # print(outs_squeeze)
             loss = loss_fn(outs_squeeze, labels)
             val_loss += loss.item()
 

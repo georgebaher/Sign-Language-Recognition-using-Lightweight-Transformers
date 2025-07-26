@@ -47,6 +47,7 @@ class SPOTERTransformer(nn.Module):
 
         # Pad mask: True where padding exists
         pad_mask = (x == -2).all(dim=-1)  # [B, T]
+        is_fully_padded = pad_mask.all(dim=1)  # [B], True for sequences that are all padding
 
         # Replace missing values with 0
         x = x.clone()
@@ -63,12 +64,31 @@ class SPOTERTransformer(nn.Module):
         # Encode sequence
         memory = self.encoder(x, src_key_padding_mask=pad_mask)
 
-        # Repeat learnable class token across batch
-        query = self.class_query.expand(B, -1, -1)  # [B, 1, D]
+        # # --- DEBUG: Check for NaNs in encoder output ---
+        # nan_mask = torch.isnan(memory)  # [B, T, D]
+        # if nan_mask.any():
+        #     print("[DEBUG] NaNs detected in encoder output (memory)!")
 
-        # Decode using class token
-        output = self.decoder(query, memory, memory_key_padding_mask=pad_mask)  # [B, 1, D]
+
+        # # Repeat learnable class token across batch
+        # query = self.class_query.expand(B, -1, -1)  # [B, 1, D]
+
+        # # Decode using class token
+        # output = self.decoder(query, memory, memory_key_padding_mask=pad_mask)  # [B, 1, D]
+        #
+        # # Classify
+        # logits = self.classifier(output.squeeze(1))  # [B, num_classes]
+        # return logits
+
+        # *** FIX NaN issue ***
+        # Sanitize the encoder's output. Replace NaN rows with zeros.
+        # This is the key step to prevent NaN propagation to the decoder.
+        memory[is_fully_padded] = 0
+
+        # Proceed with the decoder using the sanitized memory
+        query = self.class_query.expand(B, -1, -1)
+        output = self.decoder(query, memory, memory_key_padding_mask=pad_mask)
 
         # Classify
-        logits = self.classifier(output.squeeze(1))  # [B, num_classes]
+        logits = self.classifier(output.squeeze(1))
         return logits

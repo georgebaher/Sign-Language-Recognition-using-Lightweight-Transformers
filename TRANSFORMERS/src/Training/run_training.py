@@ -102,7 +102,7 @@ def train(args):
     fix_randomisation(args.seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    logger = setup_logging("out-logs", args.experiment_name)
+    logger = setup_logging(f"out-logs/{args.feature_extraction_model.lower()}", args.experiment_name)
 
     logger.info("--- Starting Experiment ---")
     logger.info(f"Experiment Name: {args.experiment_name}")
@@ -182,7 +182,7 @@ def train(args):
 
     train_losses, train_accs, val_losses, val_accs, lr_progress = [], [], [], [], []
     best_val_acc = 0.0
-    checkpoint_dir = Path("out-checkpoints") / args.experiment_name
+    checkpoint_dir = Path("out-checkpoints") / f"{args.feature_extraction_model.lower()}" /args.experiment_name
     if args.save_checkpoints: checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
     logger.info(f"\n--- Starting Training for {args.epochs} epochs ---")
@@ -235,7 +235,7 @@ def train(args):
     logger.info("=" * 82)
 
     if args.plot_stats:
-        plot_dir = Path("out-img") / args.experiment_name
+        plot_dir = Path("out-img") / f"{args.feature_extraction_model.lower()}"/ args.experiment_name
         plot_dir.mkdir(parents=True, exist_ok=True)
         fig, ax = plt.subplots(figsize=(12, 5), ncols=2)
         fig.suptitle(f"Test Acc: {test_acc:.3f} | Wighted F1: {weighted_f1:.3f}")

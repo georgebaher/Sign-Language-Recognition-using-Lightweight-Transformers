@@ -46,7 +46,7 @@ class BaselineTransformerClassification(nn.Module):
 
         # Create a mask where all top_features in a timestep are -2 → it's a padding frame
         src_key_padding_mask = (inputs == -2).all(dim=-1)  # shape: [batch_size, seq_len]
-
+        is_fully_padded = src_key_padding_mask.all(dim=1)  # [B], True for sequences that are all padding
 
         # Replace all -2 values (missing top_features) with 0
         h[h == -2] = 0.0
@@ -63,9 +63,30 @@ class BaselineTransformerClassification(nn.Module):
 
         h = self.transformer(henc, henc, src_key_padding_mask=src_key_padding_mask)
 
-        # Temporal average pooling
-        pooled = torch.mean(h, dim=1)  # [B, 1, D] and automatically the 1 is squeezed out, so it becomes [B, D]
-        # print(f"Pooled representations {pooled.shape}:", pooled)
+        # # Temporal average pooling
+        # pooled = torch.mean(h, dim=1)  # [B, 1, D] and automatically the 1 is squeezed out, so it becomes [B, D]
+        # # print(f"Pooled representations {pooled.shape}:", pooled)
+        #
+        # res = self.linear_class(pooled)  # [B, n_classes]
+        # return res
 
+
+        # *** FIX NaN issue ***
+        h[is_fully_padded] = 0.0
+
+        # 6. Perform robust masked average pooling (The Accuracy Fix)
+        # Create a mask to zero out padded time steps for all sequences
+        output_mask = (~src_key_padding_mask).unsqueeze(-1).float()  # [B, T, 1]
+
+        # Sum only the valid time steps (padded steps are zeroed out)
+        summed_h = torch.sum(h * output_mask, dim=1)  # [B, D]
+
+        # Count valid steps for each sequence, clamp to avoid division by zero
+        valid_step_count = output_mask.sum(dim=1).clamp(min=1e-9)  # [B, 1]
+
+        # Calculate the true average over non-padded steps
+        pooled = summed_h / valid_step_count  # [B, D]
+
+        # 7. Classify
         res = self.linear_class(pooled)  # [B, n_classes]
         return res

@@ -46,7 +46,7 @@ class SPOTEREncoderOnly(nn.Module):
 
         # Padding mask: True where padding
         pad_mask = (x == -2).all(dim=-1)  # [B, T]
-
+        is_fully_padded = pad_mask.all(dim=1)  # [B], True for sequences that are all padding
 
         # Replace missing values with 0
         x = x.clone()
@@ -59,10 +59,47 @@ class SPOTEREncoderOnly(nn.Module):
             # # Learnable Positional encoding
             # x = x + self.learnable_pos_embedding[:, :T]
 
-        # Encode sequence
-        memory = self.encoder(x, src_key_padding_mask=pad_mask)     # [B, T, D]
-        # Global average pooling over time
-        pooled = torch.mean(memory, dim=1)  # [B, 1, D] and automatically the 1 is squeezed out, so it becomes [B, D]
+        # # Encode sequence
+        # memory = self.encoder(x, src_key_padding_mask=pad_mask)     # [B, T, D]
+        # # Global average pooling over time
+        # pooled = torch.mean(memory, dim=1)  # [B, 1, D] and automatically the 1 is squeezed out, so it becomes [B, D]
+        #
+        # # Classify
+        # return self.classifier(pooled)
 
-        # Classify
+
+
+        # *** FIX NaN issue ***
+        #  Encode sequence.
+        # Note: 'memory' will contain NaN rows where 'is_fully_padded' is True.
+        memory = self.encoder(x, src_key_padding_mask=pad_mask)  # [B, T, D]
+
+        # Fix NaNs and perform correct masked average pooling.
+
+        # First, explicitly replace the NaN rows with zeros. This fixes the primary issue.
+        # If a sequence contained no information, its feature representation should be zero.
+        memory[is_fully_padded] = 0.0
+
+        # Second, correctly average only over the non-padded time steps.
+        # This is more accurate than a simple torch.mean() and improves performance.
+
+        # Create a mask for broadcasting: [B, T] -> [B, T, 1]
+        # `~pad_mask` is True for valid tokens.
+        output_mask = (~pad_mask).unsqueeze(-1).float()
+
+        # Zero out the memory values at padded positions for all sequences
+        masked_memory = memory * output_mask
+
+        # Sum the valid time steps
+        summed_memory = torch.sum(masked_memory, dim=1)  # Shape: [B, D]
+
+        # Count the number of valid time steps for each sequence.
+        # Use clamp to prevent division by zero for fully padded sequences.
+        valid_step_count = output_mask.sum(dim=1)  # Shape: [B, 1]
+        valid_step_count = valid_step_count.clamp(min=1e-9)
+
+        # Calculate the masked average
+        pooled = summed_memory / valid_step_count  # Shape: [B, D]
+
+        # Classify the pooled representation
         return self.classifier(pooled)
