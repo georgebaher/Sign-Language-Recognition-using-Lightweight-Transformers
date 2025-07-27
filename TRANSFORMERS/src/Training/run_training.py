@@ -114,12 +114,23 @@ def train(args):
     base_path = os.getenv(f"{args.dataset_name.upper()}_{args.feature_extraction_model.upper()}_BASE_PATH")
     fs_dir = os.getenv(f"{args.dataset_name.upper()}_{args.feature_extraction_model.upper()}_TOP_FEATURES_DIR")
 
+    #################################################################################
+    pose_landmark_file = "POSE_LANDMARKS.parquet"
+
+    # For a fair comparison, if using MediaPipe, switch to a pre-processed
+    # version of its landmarks that mimics ViTPose's output.
+    if args.feature_extraction_model.lower() == "mediapipe":
+        pose_landmark_file = "POSE_LANDMARKS_VITLIKE.parquet"
+    if "pose_landmarks" in args.features:
+        print(f"Selected Pose Landmark file: {pose_landmark_file}")
+        logger.info(f"Selected Pose Landmark file: {pose_landmark_file}")
+    #################################################################################
     dataloader_args = {
         "metadata_json_path": os.getenv(f"{args.dataset_name.upper()}_METADATA_PATH"),
         "features": args.features, "n_glosses": args.n_glosses,
         "fs": args.fs, "feature_selection_dir": fs_dir if args.fs else None,
         "n_heads": args.n_heads, "feature_padding_mode": args.feature_padding_mode,
-        "pose_landmark_path": os.path.join(base_path, "POSE_LANDMARKS.parquet"),
+        "pose_landmark_path": os.path.join(base_path, pose_landmark_file),
         "hand_landmark_path": os.path.join(base_path, "HAND_LANDMARKS.parquet"),
         "face_landmark_path": os.path.join(base_path, "FACE_LANDMARKS.parquet"),
         "pose_angle_path": os.path.join(base_path, "POSE_ANGLES.parquet"),
