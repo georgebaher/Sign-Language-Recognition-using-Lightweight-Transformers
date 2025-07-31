@@ -9,7 +9,17 @@ import mediapipe as mp
 # These are sourced directly from the MediaPipe library for accuracy.
 # Note: The POSE_CONNECTIONS from MediaPipe includes connections for face,
 # but we will only use the body part for angle calculations.
-MEDIAPIPE_POSE_CONNECTIONS = list(mp.solutions.holistic.POSE_CONNECTIONS)
+
+# MEDIAPIPE_POSE_CONNECTIONS = list(mp.solutions.holistic.POSE_CONNECTIONS)
+MEDIAPIPE_POSE_CONNECTIONS = [      #adjusted (check diagram, face does not match original connections)
+    [0, 2], [1, 2], [2, 3], [2, 7], [0, 5], [4, 5],
+    [5, 6], [5, 8], [9, 10], [11, 12], [11, 13],
+    [13, 15], [15, 17], [15, 19], [15, 21], [17, 19],
+    [12, 14], [14, 16], [16, 18], [16, 20], [16, 22],
+    [18, 20], [11, 23], [12, 24], [23, 24], [23, 25],
+    [24, 26], [25, 27], [26, 28], [27, 29], [28, 30],
+    [29, 31], [30, 32], [27, 31], [28, 32]
+]
 MEDIAPIPE_HAND_CONNECTIONS = list(mp.solutions.holistic.HAND_CONNECTIONS)
 
 # --- ViTPose / AVASAG Custom Connection Maps ---

@@ -30,7 +30,7 @@ def main():
         "-p", "--prefix",
         type=str,
         required=True,
-        help="The prefix of the landmark columns to target (e.g., 'p' for AVASAG, 'P#' for MediaPipe)."
+        help="The prefix of the landmark columns to target (e.g., 'p' for ViTpose, 'P#' for MediaPipe)."
     )
     parser.add_argument(
         "-s", "--start_index",

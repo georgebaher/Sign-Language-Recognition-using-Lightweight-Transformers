@@ -15,7 +15,7 @@ def main():
 
     # --- Command-Line Arguments ---
     parser.add_argument(
-        "--input_path",
+        "--input-path",
         type=str,
         required=True,
         help="Path to the input Parquet file that needs to be processed."

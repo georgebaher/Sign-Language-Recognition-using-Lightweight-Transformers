@@ -71,6 +71,7 @@ def main():
         conn for conn in full_connections
         if conn[0] < args.num_landmarks and conn[1] < args.num_landmarks
     ]
+    print(connections)
     print(f"Using {len(connections)} connections valid for {args.num_landmarks} landmarks.")
 
     all_frames_angles = []
