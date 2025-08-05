@@ -45,6 +45,9 @@ class SignLanguageFeaturesDataset(Dataset):
         self.max_len = max_len
         self.feature_padding_mode = feature_padding_mode
         self.n_heads = n_heads
+        # To ensure order of concatenation
+        self.CANONICAL_MODALITY_ORDER = ["hand_landmarks", "hand_angles", "pose_landmarks", "pose_angles",
+                                         "face_landmarks", "face_blendshapes"]
 
         if self.fs == 1 and not (feature_selection_dir and os.path.isdir(feature_selection_dir)):
             raise ValueError("Feature selection (fs=1) requires a valid 'feature_selection_dir'.")
@@ -74,11 +77,20 @@ class SignLanguageFeaturesDataset(Dataset):
             "hand_landmarks": hand_landmark_path, "pose_angles": pose_angle_path,
             "hand_angles": hand_angle_path, "face_blendshapes": face_blendshape_path
         }
+        print("[INFO] Received features Parquet files paths:")
+        print(f" ...   Received hand landmarks path from ({hand_landmark_path}).")
+        print(f" ...   Received hand angles path from ({hand_angle_path}).")
+        print(f" ...   Received pose landmarks path from ({pose_landmark_path}).")
+        print(f" ...   Received pose angles path from ({pose_angle_path}).")
+        print(f" ...   Received face landmarks path from ({face_landmark_path}).")
+        print(f" ...   Received face blendshapes path from ({face_blendshape_path}).")
+
 
         valid_features = list(feature_paths.keys())
-        dataframes_to_merge = []
+        dfs_to_merge = {}
         id_cols_to_drop = ['frame', 'person_id']
 
+        print(f"Loading features from {len(valid_features)} instances ...")
         for feature_name in self.features:
             if feature_name not in valid_features:
                 raise ValueError(f"Invalid feature '{feature_name}'. Valid options are: {valid_features}")
@@ -87,19 +99,22 @@ class SignLanguageFeaturesDataset(Dataset):
                 raise FileNotFoundError(
                     f"Path for feature '{feature_name}' not provided or file not found at '{path}'.")
 
-            print(f"Loading {feature_name} from {os.path.basename(path)}...")
             df = pd.read_parquet(path)
             df = df[df["video_id"].astype(str).isin(video_ids_in_split)]
             df.drop(columns=[col for col in id_cols_to_drop if col in df.columns], inplace=True)
             df['frame_idx'] = df.groupby('video_id').cumcount()
-            dataframes_to_merge.append(df)
+            dfs_to_merge[feature_name] = df
 
-        if not dataframes_to_merge:
+        if not dfs_to_merge:
             raise ValueError(f"No valid data files could be loaded for feature type: '{self.features_type}'")
+
+        dfs_to_merge_sorted = [
+            dfs_to_merge[name] for name in self.CANONICAL_MODALITY_ORDER if name in dfs_to_merge
+        ]
 
         features_df = reduce(
             lambda left, right: pd.merge(left, right, on=['video_id', 'frame_idx', 'gloss'], how='outer'),
-            dataframes_to_merge)
+            dfs_to_merge_sorted)
         features_df.fillna(-2, inplace=True)
 
         # 4. Determine the final list of feature columns

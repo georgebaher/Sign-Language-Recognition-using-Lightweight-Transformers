@@ -35,8 +35,10 @@ from src.Training.trainingUtils.utils import train_epoch_batch, evaluate_batch
 from src.Training.models.BaselineTransformerClassification import BaselineTransformerClassification
 from src.Training.models.SPOTER import SPOTERTransformer
 from src.Training.models.LSTM import LSTMClassifier
+from src.Training.models.BiLSTM import BiLSTMClassifier
 from src.Training.models.EncoderOnlyTransformer import SPOTEREncoderOnly
-
+from src.Training.models.LateFusionLogitEncoder import LateFusionEncoder
+# from src.Training.models.LateFusionLogitEncoderNoLinearProj import LateFusionEncoder
 
 def setup_logging(log_dir, experiment_name):
     """Configures a logger to write to a file and the console."""
@@ -64,11 +66,19 @@ def get_args_parser():
     parser.add_argument("--feature_extraction_model", type=str, default="vitpose", choices=["vitpose", "mediapipe"])
     parser.add_argument("--n_glosses", type=int, default=100)
     parser.add_argument("--features", nargs='+', required=True)
+    # parser.add_argument("--trim_wlasl_pose_landmarks_to_be_like_vitpose", action='store_true')
     parser.add_argument("--fs", type=int, default=0)
     parser.add_argument("--feature_padding_mode", type=str, default="sentinel",
                         choices=["sentinel", "repeat", "truncate"])
+    ############################## late fusion encoder specific args ###############################################
     parser.add_argument("--model", type=str, default="baseline_transformer",
-                        choices=["baseline_transformer", "spoter", "lstm", "encoder"])
+                        choices=["baseline_transformer", "spoter", "lstm", "bilstm", "encoder", "latefusion_encoder"])
+    parser.add_argument("--hand_input_dim", type=int, default=84)
+    parser.add_argument("--pose_input_dim", type=int, default=50)
+    parser.add_argument("--face_input_dim", type=int, default=52)
+    parser.add_argument("--scaled_hidden_dim", type=int, default=84)
+    parser.add_argument("--debug", action="store_true")
+    ###############################################################################################################
     parser.add_argument("--n_heads", type=int, default=8)
     parser.add_argument("--n_layers", type=int, default=6)
     parser.add_argument("--pe", type=int, default=1)
@@ -77,7 +87,8 @@ def get_args_parser():
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--optimizer", type=str, default="adamw", choices=["sgd", "adam", "adamw"])
     parser.add_argument("--sgd_momentum", type=float, default=0.9)
-    parser.add_argument("--scheduler", type=str, default="cosine", choices=["warmup_linear", "warmup_cosine", "warmup_constant", "none"])
+    parser.add_argument("--scheduler", type=str, default="cosine",
+                        choices=["warmup_linear", "warmup_cosine", "warmup_constant", "none"])
     parser.add_argument("--clip_gradients", type=float, default=0.0)
     parser.add_argument("--save_checkpoints", action='store_true')
     parser.add_argument("--log_freq", type=int, default=1)
@@ -117,14 +128,22 @@ def train(args):
     #################################################################################
     pose_landmark_file = "POSE_LANDMARKS.parquet"
 
-    # For a fair comparison, if using MediaPipe, switch to a pre-processed
-    # version of its landmarks that mimics ViTPose's output.
-    if args.feature_extraction_model.lower() == "mediapipe":
-        pose_landmark_file = "POSE_LANDMARKS_VITLIKE.parquet"
-    if "pose_landmarks" in args.features:
-        print(f"Selected Pose Landmark file: {pose_landmark_file}")
-        logger.info(f"Selected Pose Landmark file: {pose_landmark_file}")
+    # # For a fair comparison, if using MediaPipe, switch to a pre-processed
+    # # version of its landmarks that mimics ViTPose's output.
+    # if args.feature_extraction_model.lower() == "mediapipe" and args.trim_wlasl_pose_landmarks_to_be_like_vitpose:
+    #     pose_landmark_file = "POSE_LANDMARKS_VITLIKE.parquet"
+    # if "pose_landmarks" in args.features:
+    #     print(f"Selected Pose Landmark file: {pose_landmark_file}")
+    #     logger.info(f"Selected Pose Landmark file: {pose_landmark_file}")
     #################################################################################
+
+    # # #################################################################################
+    # # Special case for AVASAG, always use hand landmarks extracted by ViTpose.
+    # avasag_hand_landmark_file = os.path.join(os.getenv(f"AVASAG_VITPOSE_BASE_PATH"), "HAND_LANDMARKS.parquet")
+    # if "hand_landmarks" in args.features:
+    #     print(f"Selected Hand Landmark file specifically for AVASAG: {avasag_hand_landmark_file}")
+    #     logger.info(f"Selected Hand Landmark file specifically for AVASAG: {avasag_hand_landmark_file}")
+    # # #################################################################################
     dataloader_args = {
         "metadata_json_path": os.getenv(f"{args.dataset_name.upper()}_METADATA_PATH"),
         "features": args.features, "n_glosses": args.n_glosses,
@@ -132,6 +151,7 @@ def train(args):
         "n_heads": args.n_heads, "feature_padding_mode": args.feature_padding_mode,
         "pose_landmark_path": os.path.join(base_path, pose_landmark_file),
         "hand_landmark_path": os.path.join(base_path, "HAND_LANDMARKS.parquet"),
+        # if args.dataset_name.upper() == "WLASL" else avasag_hand_landmark_file,
         "face_landmark_path": os.path.join(base_path, "FACE_LANDMARKS.parquet"),
         "pose_angle_path": os.path.join(base_path, "POSE_ANGLES.parquet"),
         "hand_angle_path": os.path.join(base_path, "HAND_ANGLES.parquet"),
@@ -162,9 +182,16 @@ def train(args):
                                   n_heads=args.n_heads, w_pe=bool(args.pe))
     elif args.model == 'lstm':
         model = LSTMClassifier(input_dim=input_dim, hidden_dim=hidden_dim, num_classes=num_classes)
+    elif args.model == "bilstm":
+        model = BiLSTMClassifier(input_dim=input_dim, hidden_dim=hidden_dim, num_classes=num_classes)
     elif args.model == 'encoder':
         model = SPOTEREncoderOnly(num_classes=num_classes, hidden_dim=hidden_dim, num_layers=args.n_layers,
                                   n_heads=args.n_heads, w_pe=bool(args.pe))
+    elif args.model == 'latefusion_encoder':
+        model = LateFusionEncoder(hand_input_dim=args.hand_input_dim, pose_input_dim=args.pose_input_dim,
+                                  face_input_dim=args.face_input_dim, hidden_dim=args.scaled_hidden_dim,
+                                  num_classes=num_classes, n_heads=args.n_heads, num_layers=args.n_layers,
+                                  debug=args.debug)
     # Send model to GPU
     model.to(device)
 
@@ -193,7 +220,7 @@ def train(args):
 
     train_losses, train_accs, val_losses, val_accs, lr_progress = [], [], [], [], []
     best_val_acc = 0.0
-    checkpoint_dir = Path("out-checkpoints") / f"{args.feature_extraction_model.lower()}" /args.experiment_name
+    checkpoint_dir = Path("out-checkpoints") / f"{args.feature_extraction_model.lower()}" / args.experiment_name
     if args.save_checkpoints: checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
     logger.info(f"\n--- Starting Training for {args.epochs} epochs ---")
@@ -246,7 +273,7 @@ def train(args):
     logger.info("=" * 82)
 
     if args.plot_stats:
-        plot_dir = Path("out-img") / f"{args.feature_extraction_model.lower()}"/ args.experiment_name
+        plot_dir = Path("out-img") / f"{args.feature_extraction_model.lower()}" / args.experiment_name
         plot_dir.mkdir(parents=True, exist_ok=True)
         fig, ax = plt.subplots(figsize=(12, 5), ncols=2)
         fig.suptitle(f"Test Acc: {test_acc:.3f} | Wighted F1: {weighted_f1:.3f}")

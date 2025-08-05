@@ -15,6 +15,8 @@ def count_success(preds, labels, calc_stats=False):
 
 
 def train_epoch_batch(model, dataloader, loss_fn, optimizer, device, scheduler=None, clip_gradients=False, clip_weights=False):
+    model.train()   # important for RNNs like LSTM for activating dropout layer
+
     pred_correct, pred_all = 0, 0
     running_loss = 0.0
 
@@ -68,6 +70,7 @@ def train_epoch_batch(model, dataloader, loss_fn, optimizer, device, scheduler=N
 
 
 def evaluate_batch(model, loss_fn, dataloader, device, return_preds=False):
+    model.eval()  # Set model to evaluation mode, important for RNNs like LSTM for activating dropout layer
     pred_correct, pred_all = 0, 0
     val_loss = 0.0
 
@@ -75,7 +78,6 @@ def evaluate_batch(model, loss_fn, dataloader, device, return_preds=False):
     all_preds = []
     all_labels = []
 
-    model.eval()  # Set model to evaluation mode
     with torch.no_grad():  # Disable gradient calculations for efficiency
         for i, data in enumerate(dataloader):
             batch, labels = data

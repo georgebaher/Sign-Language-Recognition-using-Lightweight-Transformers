@@ -30,7 +30,9 @@ class SPOTERTransformer(nn.Module):
         self.n_heads = n_heads
         self.class_query = nn.Parameter(torch.randn(1, 1, hidden_dim))  # [1, 1, D]
         self.sin_cos_pos_embedding = PositionalEncodingSinCos(hidden_dim, dropout, max_len,)
-        self.learnable_pos_embedding = nn.Parameter(torch.randn(1, max_len, hidden_dim))      # learnable positional embedding
+        self.learnable_pos_embedding = torch.randn(1, max_len, hidden_dim)
+        if w_pe:
+            self.learnable_pos_embedding = nn.Parameter(torch.randn(1, max_len, hidden_dim))      # learnable positional embedding
 
         encoder_layer = nn.TransformerEncoderLayer(d_model=hidden_dim, nhead=n_heads, dropout=dropout, batch_first=True)
         decoder_layer = nn.TransformerDecoderLayer(d_model=hidden_dim, nhead=n_heads, dropout=dropout, batch_first=True)
