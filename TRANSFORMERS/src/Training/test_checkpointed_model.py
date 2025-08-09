@@ -12,7 +12,7 @@ from torch.utils.data import DataLoader
 from src.utils.args_utils import *
 from src.Training.models.BaselineTransformerClassification import BaselineTransformerClassification
 from src.Training.models.SPOTER import SPOTERTransformer
-from src.Training.models.EncoderOnlyTransformer import SPOTEREncoderOnly
+from src.Training.models.EncoderOnlyTransformer import EncoderOnly
 from src.Training.models.LSTM import LSTMClassifier
 from src.Training.trainingUtils.utils import evaluate_batch
 from src.Training.dataloader.features_dataloader import WLASLParquetDataset
@@ -34,7 +34,7 @@ def get_model(args):
                                  n_heads=args.n_heads,
                                  w_pe=args.pe)
     elif args.model2use == 'encoder':
-        return SPOTEREncoderOnly(
+        return EncoderOnly(
             num_classes=args.num_classes,
             hidden_dim=args.hidden_dim,
             n_heads=args.n_heads,

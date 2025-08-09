@@ -36,9 +36,12 @@ from src.Training.models.BaselineTransformerClassification import BaselineTransf
 from src.Training.models.SPOTER import SPOTERTransformer
 from src.Training.models.LSTM import LSTMClassifier
 from src.Training.models.BiLSTM import BiLSTMClassifier
-from src.Training.models.EncoderOnlyTransformer import SPOTEREncoderOnly
-from src.Training.models.LateFusionLogitEncoder import LateFusionEncoder
-# from src.Training.models.LateFusionLogitEncoderNoLinearProj import LateFusionEncoder
+from src.Training.models.EncoderOnlyTransformer import EncoderOnly
+# from src.Training.models.LateFusionLogitEncoderWeightedSumWithLinearProjection import LateFusionEncoder
+# from src.Training.models.LateFusionLogitEncoderWeightedSumNoLinearProjection import LateFusionEncoder
+from src.Training.models.LateFusionLogitEncoderConcat import LateFusionEncoder
+from src.Training.models.LateFusionModelUsingPretrainedEncodersWeightedSum import LateFusionPET
+# from src.Training.models.LateFusionModelUsingPretrainedEncodersConcat import LateFusionPET
 
 def setup_logging(log_dir, experiment_name):
     """Configures a logger to write to a file and the console."""
@@ -57,6 +60,16 @@ def setup_logging(log_dir, experiment_name):
     return logger
 
 
+def load_expert(ckpt_path, num_classes, hidden_dim, n_heads, num_layers, device):
+    expert_model = EncoderOnly(num_classes=num_classes, hidden_dim=hidden_dim, n_heads=n_heads,
+                               num_layers=num_layers)
+    state_dict = torch.load(ckpt_path, map_location=device)
+    # print(state_dict.keys())
+    expert_model.load_state_dict(state_dict)
+    expert_model.to(device)
+    return expert_model
+
+
 def get_args_parser():
     """Defines command-line arguments for the training script."""
     parser = argparse.ArgumentParser("Sign Language Transformer Training", add_help=False)
@@ -70,18 +83,30 @@ def get_args_parser():
     parser.add_argument("--fs", type=int, default=0)
     parser.add_argument("--feature_padding_mode", type=str, default="sentinel",
                         choices=["sentinel", "repeat", "truncate"])
+
     ############################## late fusion encoder specific args ###############################################
     parser.add_argument("--model", type=str, default="baseline_transformer",
-                        choices=["baseline_transformer", "spoter", "lstm", "bilstm", "encoder", "latefusion_encoder"])
+                        choices=["baseline_transformer", "spoter", "lstm", "bilstm", "encoder", "latefusion_encoder", "latefusion_pet"])
     parser.add_argument("--hand_input_dim", type=int, default=84)
     parser.add_argument("--pose_input_dim", type=int, default=50)
     parser.add_argument("--face_input_dim", type=int, default=52)
     parser.add_argument("--scaled_hidden_dim", type=int, default=84)
     parser.add_argument("--debug", action="store_true")
     ###############################################################################################################
+
+
+    ############################## late fusion encoder PET specific args ###############################################
+    parser.add_argument("--hand_ckpt_path", type=str, help="Path to the pre-trained hand expert model.")
+    parser.add_argument("--pose_ckpt_path", type=str, help="Path to the pre-trained pose expert model.")
+    parser.add_argument("--face_ckpt_path", type=str, help="Path to the pre-trained face expert model.")
+    parser.add_argument("--pet_hidden_dim_hand", type=int, help="The hidden_dim the hand expert was trained with. THIS INCLUDES PADDING DIMENSION.")
+    parser.add_argument("--pet_hidden_dim_pose", type=int, help="The hidden_dim the pose expert was trained with. THIS INCLUDES PADDING DIMENSION.")
+    parser.add_argument("--pet_hidden_dim_face", type=int, help="The hidden_dim the face expert was trained with. THIS INCLUDES PADDING DIMENSION.")
+    #####################################################################################################################
+
     parser.add_argument("--n_heads", type=int, default=8)
     parser.add_argument("--n_layers", type=int, default=6)
-    parser.add_argument("--pe", type=int, default=1)
+    parser.add_argument("--pe", type=int, default=0)
     parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--batch_size", type=int, default=32)
     parser.add_argument("--lr", type=float, default=1e-4)
@@ -185,13 +210,36 @@ def train(args):
     elif args.model == "bilstm":
         model = BiLSTMClassifier(input_dim=input_dim, hidden_dim=hidden_dim, num_classes=num_classes)
     elif args.model == 'encoder':
-        model = SPOTEREncoderOnly(num_classes=num_classes, hidden_dim=hidden_dim, num_layers=args.n_layers,
-                                  n_heads=args.n_heads, w_pe=bool(args.pe))
+        model = EncoderOnly(num_classes=num_classes, hidden_dim=hidden_dim, num_layers=args.n_layers,
+                            n_heads=args.n_heads, w_pe=bool(args.pe))
     elif args.model == 'latefusion_encoder':
+        if not all([args.hand_input_dim, args.pose_input_dim, args.face_input_dim, args.scaled_hidden_dim]):
+            raise ValueError("For --model latefusion_encoder, you must provide all input dims and a scaled_hidden_dim.")
         model = LateFusionEncoder(hand_input_dim=args.hand_input_dim, pose_input_dim=args.pose_input_dim,
                                   face_input_dim=args.face_input_dim, hidden_dim=args.scaled_hidden_dim,
                                   num_classes=num_classes, n_heads=args.n_heads, num_layers=args.n_layers,
                                   debug=args.debug)
+    elif args.model == 'latefusion_pet':
+        if not all([args.hand_ckpt_path, args.pose_ckpt_path, args.face_ckpt_path, args.hand_input_dim, args.pose_input_dim, args.face_input_dim, args.pet_hidden_dim_hand, args.pet_hidden_dim_pose, args.pet_hidden_dim_face]):
+            raise ValueError("For --model pet_encoder, you must provide checkpoint paths for all three experts.")
+        hand_expert = load_expert(args.hand_ckpt_path, args.n_glosses, args.pet_hidden_dim_hand, args.n_heads, args.n_layers,
+                                  device)
+        pose_expert = load_expert(args.pose_ckpt_path, args.n_glosses, args.pet_hidden_dim_pose, args.n_heads, args.n_layers,
+                                  device)
+        face_expert = load_expert(args.face_ckpt_path, args.n_glosses, args.pet_hidden_dim_face, args.n_heads, args.n_layers,
+                                  device)
+
+        model = LateFusionPET(
+            hand_expert=hand_expert,
+            pose_expert=pose_expert,
+            face_expert=face_expert,
+            num_classes=args.n_glosses,
+            hand_input_dim=args.hand_input_dim,
+            pose_input_dim=args.pose_input_dim,
+            face_input_dim=args.face_input_dim,
+            debug=args.debug,
+        )
+
     # Send model to GPU
     model.to(device)
 
@@ -201,9 +249,13 @@ def train(args):
         f"Initial GPU Memory used: {torch.cuda.memory_allocated() / 1024 ** 2:.2f} MB")
 
     loss_fn = nn.CrossEntropyLoss()
-    optimizer_map = {"sgd": optim.SGD(model.parameters(), lr=args.lr, momentum=args.sgd_momentum),
-                     "adam": optim.Adam(model.parameters(), lr=args.lr),
-                     "adamw": optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-3)}
+
+    trainable_params = list(filter(lambda p: p.requires_grad, model.parameters()))
+    # print(trainable_params)
+
+    optimizer_map = {"sgd": optim.SGD(trainable_params, lr=args.lr, momentum=args.sgd_momentum),
+                     "adam": optim.Adam(trainable_params, lr=args.lr),
+                     "adamw": optim.AdamW(trainable_params, lr=args.lr, weight_decay=1e-3)}
     optimizer = optimizer_map.get(args.optimizer.lower())
     if optimizer is None: raise ValueError(f"Invalid optimizer name: {args.optimizer}")
 

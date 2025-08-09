@@ -4,7 +4,7 @@ import math
 
 
 class PositionalEncodingSinCos(nn.Module):
-    def __init__(self, d_model, dropout=0.1, max_len=5000):
+    def __init__(self, d_model, dropout=0.0, max_len=5000):
         super().__init__()
         self.dropout = nn.Dropout(p=dropout)
 
@@ -20,10 +20,10 @@ class PositionalEncodingSinCos(nn.Module):
         return self.dropout(x + self.pe[:, :x.size(1)])
 
 
-class SPOTEREncoderOnly(nn.Module):
-    def __init__(self, num_classes, hidden_dim=256, n_heads=8, num_layers=6, dropout=0.1, max_len=500, w_pe=True):
+class EncoderOnly(nn.Module):
+    def __init__(self, num_classes, hidden_dim=256, n_heads=8, num_layers=6, dropout=0.0, max_len=500, w_pe=False):
         super().__init__()
-        print(f"[INFO] Initializing SPOTEREncoderOnly with {n_heads} heads, hidden_dim={hidden_dim}")
+        print(f"[INFO] Initializing EncoderOnly with {n_heads} heads, hidden_dim={hidden_dim}")
         self.hidden_dim = hidden_dim
         self.n_heads = n_heads
 
@@ -58,16 +58,6 @@ class SPOTEREncoderOnly(nn.Module):
             x = self.sin_cos_pos_embedding(x)
             # # Learnable Positional encoding
             # x = x + self.learnable_pos_embedding[:, :T]
-
-        # # Encode sequence
-        # memory = self.encoder(x, src_key_padding_mask=pad_mask)     # [B, T, D]
-        # # Global average pooling over time
-        # pooled = torch.mean(memory, dim=1)  # [B, 1, D] and automatically the 1 is squeezed out, so it becomes [B, D]
-        #
-        # # Classify
-        # return self.classifier(pooled)
-
-
 
         # *** FIX NaN issue ***
         #  Encode sequence.

@@ -63,14 +63,6 @@ class BaselineTransformerClassification(nn.Module):
 
         h = self.transformer(henc, henc, src_key_padding_mask=src_key_padding_mask)
 
-        # # Temporal average pooling
-        # pooled = torch.mean(h, dim=1)  # [B, 1, D] and automatically the 1 is squeezed out, so it becomes [B, D]
-        # # print(f"Pooled representations {pooled.shape}:", pooled)
-        #
-        # res = self.linear_class(pooled)  # [B, n_classes]
-        # return res
-
-
         # *** FIX NaN issue ***
         h[is_fully_padded] = 0.0
 
