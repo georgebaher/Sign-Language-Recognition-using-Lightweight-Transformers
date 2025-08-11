@@ -22,7 +22,9 @@ from transformers import (
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from dotenv import load_dotenv
-from sklearn.metrics import f1_score
+from sklearn.metrics import f1_score, confusion_matrix, accuracy_score
+import seaborn as sns
+
 
 # --- Add the project's root directory to the Python path ---
 # This allows the script to find the 'src' and 'dataset' modules.
@@ -39,7 +41,7 @@ from src.Training.models.BiLSTM import BiLSTMClassifier
 from src.Training.models.EncoderOnlyTransformer import EncoderOnly
 # from src.Training.models.LateFusionLogitEncoderWeightedSumWithLinearProjection import LateFusionEncoder
 # from src.Training.models.LateFusionLogitEncoderWeightedSumNoLinearProjection import LateFusionEncoder
-from src.Training.models.LateFusionLogitEncoderConcat import LateFusionEncoder
+from src.Training.models.LateFusionLogitEncoderWeightedSumNoLinearProjection import LateFusionEncoder
 from src.Training.models.LateFusionModelUsingPretrainedEncodersWeightedSum import LateFusionPET
 # from src.Training.models.LateFusionModelUsingPretrainedEncodersConcat import LateFusionPET
 
@@ -60,7 +62,7 @@ def setup_logging(log_dir, experiment_name):
     return logger
 
 
-def load_expert(ckpt_path, num_classes, hidden_dim, n_heads, num_layers, device):
+def load_expert_encoder(ckpt_path, num_classes, hidden_dim, n_heads, num_layers, device):
     expert_model = EncoderOnly(num_classes=num_classes, hidden_dim=hidden_dim, n_heads=n_heads,
                                num_layers=num_layers)
     state_dict = torch.load(ckpt_path, map_location=device)
@@ -118,6 +120,16 @@ def get_args_parser():
     parser.add_argument("--save_checkpoints", action='store_true')
     parser.add_argument("--log_freq", type=int, default=1)
     parser.add_argument("--plot_stats", action='store_true')
+
+    # --- NEW: Evaluation-Only Arguments ---
+    eval_group = parser.add_argument_group('Evaluation-Only Mode')
+    eval_group.add_argument("--evaluate_only", action='store_true',
+                            help="If set, skips training and only runs evaluation.")
+    eval_group.add_argument("--checkpoint_path", type=str,
+                            help="Path to the trained model checkpoint (.pth) for evaluation-only mode.")
+    eval_group.add_argument("--output_dir", type=str, default="evaluation_results",
+                            help="Directory to save evaluation artifacts like plots.")
+
     return parser
 
 
@@ -131,6 +143,25 @@ def fix_randomisation(seed):
         torch.cuda.manual_seed_all(seed)
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
+
+
+def plot_confusion_matrix(y_true, y_pred, class_names, output_path):
+    """Generates and saves a confusion matrix plot."""
+    cm = confusion_matrix(y_true, y_pred, normalize='true')
+
+    fig, ax = plt.subplots(figsize=(40, 40))  # Large figure size for many classes
+    sns.heatmap(cm, annot=False, fmt=".2f", cmap='Blues', ax=ax,
+                xticklabels=class_names, yticklabels=class_names)
+
+    ax.set_title('Normalized Confusion Matrix', fontsize=20)
+    ax.set_ylabel('True Label', fontsize=16)
+    ax.set_xlabel('Predicted Label', fontsize=16)
+    plt.xticks(rotation=90)
+    plt.yticks(rotation=0)
+    plt.tight_layout()
+
+    fig.savefig(output_path, dpi=300)
+    print(f"Confusion matrix plot saved to: {output_path}")
 
 
 def train(args):
@@ -176,29 +207,20 @@ def train(args):
         "n_heads": args.n_heads, "feature_padding_mode": args.feature_padding_mode,
         "pose_landmark_path": os.path.join(base_path, pose_landmark_file),
         "hand_landmark_path": os.path.join(base_path, "HAND_LANDMARKS.parquet"),
-        # if args.dataset_name.upper() == "WLASL" else avasag_hand_landmark_file,
         "face_landmark_path": os.path.join(base_path, "FACE_LANDMARKS.parquet"),
         "pose_angle_path": os.path.join(base_path, "POSE_ANGLES.parquet"),
         "hand_angle_path": os.path.join(base_path, "HAND_ANGLES.parquet"),
         "face_blendshape_path": os.path.join(base_path, "FACE_BLENDSHAPES.parquet"),
     }
 
-    logger.info("\n--- Loading Datasets ---")
-    train_set = SignLanguageFeaturesDataset(**dataloader_args, split="train")
-    val_set = SignLanguageFeaturesDataset(**dataloader_args, split="val")
-    test_set = SignLanguageFeaturesDataset(**dataloader_args, split="test")
+    logger.info(f"\n--- Building Model Architecture: {args.model} ---")
 
-    logger.info(f"Dataset Sizes: Train={len(train_set)}, Val={len(val_set)}, Test={len(test_set)}")
-    logger.info(f"Number of Classes: {len(train_set.gloss2idx)}")
-    logger.info(f"Feature Dimension: {train_set.feature_dim} | Max Sequence Length: {train_set.max_len}")
+    # We build a temporary dataset just to infer dimensions
+    temp_dataset = SignLanguageFeaturesDataset(**dataloader_args, split='val')
+    input_dim, num_classes = temp_dataset.feature_dim, len(temp_dataset.gloss2idx)
+    hidden_dim = input_dim
+    del temp_dataset  # Free up memory
 
-    train_loader = DataLoader(train_set, shuffle=True, batch_size=args.batch_size)
-    val_loader = DataLoader(val_set, shuffle=False, batch_size=args.batch_size)
-    test_loader = DataLoader(test_set, shuffle=False, batch_size=args.batch_size)
-
-    input_dim, hidden_dim, num_classes = train_set.feature_dim, train_set.feature_dim, len(train_set.gloss2idx)
-
-    logger.info(f"\n--- Building Model: {args.model} ---")
     if args.model == 'baseline_transformer':
         model = BaselineTransformerClassification(num_classes=num_classes, hidden_dim=hidden_dim,
                                                   num_layers=args.n_layers, n_heads=args.n_heads, w_pe=bool(args.pe))
@@ -222,12 +244,12 @@ def train(args):
     elif args.model == 'latefusion_pet':
         if not all([args.hand_ckpt_path, args.pose_ckpt_path, args.face_ckpt_path, args.hand_input_dim, args.pose_input_dim, args.face_input_dim, args.pet_hidden_dim_hand, args.pet_hidden_dim_pose, args.pet_hidden_dim_face]):
             raise ValueError("For --model pet_encoder, you must provide checkpoint paths for all three experts.")
-        hand_expert = load_expert(args.hand_ckpt_path, args.n_glosses, args.pet_hidden_dim_hand, args.n_heads, args.n_layers,
-                                  device)
-        pose_expert = load_expert(args.pose_ckpt_path, args.n_glosses, args.pet_hidden_dim_pose, args.n_heads, args.n_layers,
-                                  device)
-        face_expert = load_expert(args.face_ckpt_path, args.n_glosses, args.pet_hidden_dim_face, args.n_heads, args.n_layers,
-                                  device)
+        hand_expert = load_expert_encoder(args.hand_ckpt_path, args.n_glosses, args.pet_hidden_dim_hand, args.n_heads, args.n_layers,
+                                          device)
+        pose_expert = load_expert_encoder(args.pose_ckpt_path, args.n_glosses, args.pet_hidden_dim_pose, args.n_heads, args.n_layers,
+                                          device)
+        face_expert = load_expert_encoder(args.face_ckpt_path, args.n_glosses, args.pet_hidden_dim_face, args.n_heads, args.n_layers,
+                                          device)
 
         model = LateFusionPET(
             hand_expert=hand_expert,
@@ -242,6 +264,60 @@ def train(args):
 
     # Send model to GPU
     model.to(device)
+
+    # ==============================================================================
+    # MODE SWITCH: Run Evaluation-Only or Full Training
+    # ==============================================================================
+    if args.evaluate_only:
+        if not args.checkpoint_path or not os.path.exists(args.checkpoint_path):
+            raise ValueError("--evaluate_only mode requires a valid --checkpoint_path.")
+
+        logger.info(f"\n--- Loading checkpoint for evaluation: {args.checkpoint_path} ---")
+        model.load_state_dict(torch.load(args.checkpoint_path, map_location=device))
+
+        logger.info("\n--- Loading Test Dataset ---")
+        test_set = SignLanguageFeaturesDataset(**dataloader_args, split="test")
+        test_loader = DataLoader(test_set, shuffle=False, batch_size=args.batch_size)
+
+        logger.info("\n--- Running Evaluation on Test Set ---")
+        loss_fn = nn.CrossEntropyLoss()
+        _, test_acc, (y_true, y_pred) = evaluate_batch(model, loss_fn, test_loader, device, return_preds=True)
+
+        macro_f1 = f1_score(y_true, y_pred, average='macro', zero_division=0)
+        weighted_f1 = f1_score(y_true, y_pred, average='weighted', zero_division=0)
+
+        logger.info("\n" + "=" * 30 + " EVALUATION SUMMARY " + "=" * 30)
+        logger.info(f"Checkpoint: {os.path.basename(args.checkpoint_path)}")
+        logger.info(f"Test Accuracy: {test_acc:.4f}")
+        logger.info(f"Test Macro F1-Score: {macro_f1:.4f}")
+        logger.info(f"Test Weighted F1-Score: {weighted_f1:.4f}")
+        logger.info("=" * 82)
+
+        logger.info("\n--- Generating Confusion Matrix ---")
+        os.makedirs(args.output_dir, exist_ok=True)
+        class_names = [test_set.idx2gloss[i] for i in range(len(test_set.idx2gloss))]
+        plot_filename = f"{args.experiment_name}_confusion_matrix.png"
+        plot_path = os.path.join(args.output_dir, plot_filename)
+        plot_confusion_matrix(y_true, y_pred, class_names, plot_path)
+
+        logger.info("--- Evaluation complete ---")
+        return  # Exit the function cleanly
+
+    # --- If not evaluate_only, proceed with the full training pipeline ---
+    logger.info("\n--- Loading Datasets ---")
+    train_set = SignLanguageFeaturesDataset(**dataloader_args, split="train")
+    val_set = SignLanguageFeaturesDataset(**dataloader_args, split="val")
+    test_set = SignLanguageFeaturesDataset(**dataloader_args, split="test")
+
+    logger.info(f"Dataset Sizes: Train={len(train_set)}, Val={len(val_set)}, Test={len(test_set)}")
+    logger.info(f"Number of Classes: {len(train_set.gloss2idx)}")
+    logger.info(f"Feature Dimension: {train_set.feature_dim} | Max Sequence Length: {train_set.max_len}")
+
+    train_loader = DataLoader(train_set, shuffle=True, batch_size=args.batch_size)
+    val_loader = DataLoader(val_set, shuffle=False, batch_size=args.batch_size)
+    test_loader = DataLoader(test_set, shuffle=False, batch_size=args.batch_size)
+
+    input_dim, hidden_dim, num_classes = train_set.feature_dim, train_set.feature_dim, len(train_set.gloss2idx)
 
     total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     logger.info(f"Total Trainable Parameters: {total_params:,}")
