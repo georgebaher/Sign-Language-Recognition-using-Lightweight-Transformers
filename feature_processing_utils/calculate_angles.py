@@ -2,17 +2,16 @@
 
 import pandas as pd
 import numpy as np
-import os
+import re
 from argparse import ArgumentParser
 from tqdm import tqdm
 from connections import get_connections
 
 
 class LandmarkModel:
-    def __init__(self, landmarks, connections, num_landmarks):
+    def __init__(self, landmarks, connections):
         self.connections_map = connections
-        self.num_landmarks = num_landmarks
-        landmarks_array = np.array(landmarks, dtype=float).reshape((self.num_landmarks, 2))
+        landmarks_array = np.array(landmarks, dtype=float).reshape((-1, 2))
         self.feature_vector = self._get_feature_vector(landmarks_array)
 
     def _get_connections_from_landmarks(self, landmarks):
@@ -47,6 +46,42 @@ def get_header(connections):
                     for i in range(len(conns_as_tuples)) for j in range(i + 1, len(conns_as_tuples))]
     return angle_labels
 
+def extract_index(column_name: str) -> int:
+    """
+    Extract the first number (index) from column names like 'P#1_x', 'p1_x', 'LH#1_x', 'h1_x', etc.
+
+    Args:
+        column_name (str): The name of the column.
+
+    Returns:
+        int: The extracted index number, or None if not found.
+    """
+    match = re.search(r'\d+', column_name)
+    return int(match.group()) if match else None
+
+def scatter_values_to_array(indices, values):
+    """
+    Returns a NumPy array where values are scattered at specified indices,
+    and all other positions are zero.
+
+    Parameters:
+    - indices: List[int] - indices to place values
+    - values: List[float] - values to place at those indices
+
+    Returns:
+    - np.ndarray
+    """
+    if len(indices) != len(values)/2:
+        raise ValueError(f"Indices and values must be of the same length. Indices={indices}, values={values}")
+
+    max_index = max(indices)
+    result = np.zeros((max_index+1)*2)
+    cnt = 0
+    while cnt < len(indices):
+        result[indices[cnt]] = values[cnt]
+        result[indices[cnt]+1] = values[cnt+1]
+        cnt += 1
+    return result
 
 def main():
     parser = ArgumentParser(description="Calculate angular features from landmark data using column indices.")
@@ -67,11 +102,14 @@ def main():
     df = pd.read_parquet(args.input_path)
 
     full_connections = get_connections(args.source, args.body_part)
+
+    list_of_landmark_indices = set([extract_index(column) for column in df.columns])
+    list_of_landmark_indices = [elem for elem in list_of_landmark_indices if elem is not None]
+    print(f"--- {len(list_of_landmark_indices)} Landmarks extracted ---")
     connections = [
         conn for conn in full_connections
-        if conn[0] < args.num_landmarks and conn[1] < args.num_landmarks
+        if conn[0] in list_of_landmark_indices and conn[1] in list_of_landmark_indices
     ]
-    print(connections)
     print(f"Using {len(connections)} connections valid for {args.num_landmarks} landmarks.")
 
     all_frames_angles = []
@@ -87,19 +125,20 @@ def main():
             right_landmarks = row.iloc[
                               args.start_col + num_coords_per_hand: args.start_col + (2 * num_coords_per_hand)].values
 
-            l_model = LandmarkModel(left_landmarks, connections, args.num_landmarks)
-            r_model = LandmarkModel(right_landmarks, connections, args.num_landmarks)
+            l_model = LandmarkModel(left_landmarks, connections)
+            r_model = LandmarkModel(right_landmarks, connections)
 
             l_prefixed_header = [f"L_{h}" for h in angle_headers]
             r_prefixed_header = [f"R_{h}" for h in angle_headers]
 
             frame_angles.update(zip(l_prefixed_header, l_model.feature_vector))
             frame_angles.update(zip(r_prefixed_header, r_model.feature_vector))
-        else:
+        else:   # pose
             num_coords = args.num_landmarks * 2
-            landmarks = row.iloc[args.start_col: args.start_col + num_coords].values
+            landmarks = scatter_values_to_array(list_of_landmark_indices, row.iloc[args.start_col: args.start_col + num_coords].values)
+            #landmarks = row.iloc[args.start_col: args.start_col + num_coords].values
 
-            model = LandmarkModel(landmarks, connections, args.num_landmarks)
+            model = LandmarkModel(landmarks, connections)
             frame_angles.update(zip(angle_headers, model.feature_vector))
 
         all_frames_angles.append(frame_angles)

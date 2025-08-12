@@ -12,7 +12,6 @@ class HolisticProcessor:
     A class to extract and process landmarks from videos using MediaPipe Holistic.
     This version returns separate DataFrames for pose, face, and hand landmarks.
 
-    Author: George Elswefy (<georgeelswefy@gmail.com>)
     """
 
     _landmark_counts = {
@@ -108,7 +107,7 @@ class HolisticProcessor:
             extracted_data['face'] = extract(results.face_landmarks, self._landmark_counts['face'], False)
         return extracted_data
 
-    def process_video(self, video_path, save_annotation=False, gloss=""):
+    def process_video(self, video_path, save_annotation=False, annotated_videos_dir="", gloss=""):
         """
         Processes a single video and returns separate DataFrames for each feature set.
 
@@ -117,7 +116,6 @@ class HolisticProcessor:
         """
         cap = cv2.VideoCapture(video_path)
         if not cap.isOpened():
-            print(f"Error: Cannot open video {video_path}")
             return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), None
 
         frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -128,9 +126,10 @@ class HolisticProcessor:
         out = None
 
         if save_annotation:
-            temp_dir = os.getenv("WLASL_MEDIAPIPE_ANNOTATED_VIDEOS")
-            os.makedirs(temp_dir, exist_ok=True)
-            video_output_path = os.path.join(temp_dir, f"{clean_video_id}_annotated.mp4")
+            if not annotated_videos_dir:
+                annotated_videos_dir = "annotated_videos"
+            os.makedirs(annotated_videos_dir, exist_ok=True)
+            video_output_path = os.path.join(annotated_videos_dir, f"{clean_video_id}_annotated.mp4")
             fps = cap.get(cv2.CAP_PROP_FPS) or 25
             frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
             frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
@@ -189,7 +188,6 @@ class HolisticProcessor:
 
         def create_df(data_list, columns, name):
             if not data_list:
-                print(f"No {name} landmarks detected in video {video_id}")
                 return pd.DataFrame()
             df = pd.DataFrame(data_list, columns=columns)
             df.insert(0, 'video_id', vid_id_clean)
