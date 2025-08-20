@@ -16,7 +16,7 @@ import threading
 # 0. Imports / Model modules
 # ==============================================================================
 try:
-    from ViTPose.ViTPose import pose_utils
+    from ViTPose import pose_utils
     from TRANSFORMERS.src.Training.models.LateFusionLogitEncoderWeightedSumNoLinearProjection import LateFusionEncoder
 except ImportError:
     print("Adding project root to Python path...")
@@ -32,7 +32,7 @@ print("--- Initializing Models (this may take a moment)... ---")
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # --- Load ViTPose Model using pose_utils ---
-VITPOSE_BASE_DIR = r"C:\Users\boulosge\Desktop\Acht\ViTPose\ViTPose"
+VITPOSE_BASE_DIR = r"/ViTPose_\ViTPose"
 DET_CONFIG = os.path.join(VITPOSE_BASE_DIR, 'demo/mmdetection_cfg/yolox_l_8x8_300e_coco.py')
 DET_CHECKPOINT = os.path.join(VITPOSE_BASE_DIR, 'models/yolox_l_8x8_300e_coco_20211126_140236-d3bd2b23.pth')
 POSE_CONFIG = os.path.join(VITPOSE_BASE_DIR,
