@@ -340,13 +340,15 @@ with gr.Blocks(theme=gr.themes.Soft()) as demo:
         # --- Tab 2: Record (OpenCV) & Analyze (raw preview -> annotated preview) ---
         with gr.TabItem("Record (OpenCV) & Analyze"):
             gr.Markdown(
-                "Record locally with OpenCV, **preview the raw clip**, then analyze and preview the **annotated** result.")
+                "Record locally with OpenCV, **preview the raw clip**, then analyze and preview the **annotated** result."
+            )
 
             with gr.Row():
                 with gr.Column(scale=1):
                     ocv_status = gr.Textbox(label="Status", interactive=False)
-                    ocv_start = gr.Button("Start Recording (OpenCV)", variant="primary")
-                    ocv_stop = gr.Button("Stop & Show Raw Preview")
+
+                    # Single toggle button
+                    ocv_toggle = gr.Button(value="Start Recording", variant="primary")
 
                     gr.Markdown("### Visualization Options")
                     ocv_show_pose = gr.Checkbox(label="Show Pose", value=True)
@@ -361,30 +363,64 @@ with gr.Blocks(theme=gr.themes.Soft()) as demo:
                     ocv_pred_out = gr.Textbox(label="Model Prediction")
                     ocv_weights = gr.Plot(label="Learned Modality Weights")
 
-            # Start recording
-            def _ocv_start():
-                return recorder.start()
-
-            ocv_start.click(fn=_ocv_start, outputs=[ocv_status])
-
-            # Stop recording -> show raw preview
-            def _ocv_stop():
-                path, msg = recorder.stop()
-                return path, msg
+            # Keep whether we're recording in state
+            is_recording_state = gr.State(False)
 
 
-            ocv_stop.click(fn=_ocv_stop, outputs=[ocv_raw_preview, ocv_status])
+            # One function toggles start/stop
+            def _toggle_record(is_recording: bool):
+                if not is_recording:
+                    # Start recording
+                    msg = recorder.start()
+                    # Only flip to "recording" if start actually succeeded
+                    started = getattr(recorder, "running", False)
+                    if started:
+                        return (
+                            True,  # new state
+                            gr.update(value="Stop & Show Raw Preview"),
+                            None,  # don't change preview yet
+                            msg,
+                            gr.update(interactive=False),  # disable Analyze while recording (optional)
+                        )
+                    else:
+                        # Stay idle if camera failed to open
+                        return (
+                            False,
+                            gr.update(value="Start Recording"),
+                            None,
+                            msg,
+                            gr.update(interactive=True),
+                        )
+                else:
+                    # Stop recording -> show preview
+                    path, msg = recorder.stop()
+                    return (
+                        False,  # new state
+                        gr.update(value="Start Recording"),
+                        path,  # update raw preview with saved file
+                        msg,
+                        gr.update(interactive=True),  # re-enable Analyze
+                    )
+
+
+            # Wire the toggle button
+            ocv_toggle.click(
+                fn=_toggle_record,
+                inputs=[is_recording_state],
+                outputs=[is_recording_state, ocv_toggle, ocv_raw_preview, ocv_status, ocv_analyze],
+            )
+
 
             # Analyze -> annotated preview + prediction + weights
             def _analyze_last(show_pose, show_hands, show_face):
                 p = recorder.path
                 if not p or not os.path.exists(p):
                     return None, "No recording found.", None, None
-                # Flip ONLY for webcam recordings
+                # Flip ONLY for webcam recordings (set to True if you want model to see mirrored input)
                 ann_path, pred_text, weights_plot = process_video(
                     p, show_pose, show_hands, show_face, flip_for_model=False
                 )
-                return ann_path, pred_text, weights_plot, f"Analyzed: {os.path.basename(p)}"
+                return ann_path, pred_text, weights_plot, f"Analyzed video"
 
 
             ocv_analyze.click(
