@@ -1,0 +1,15 @@
+.idea/
+__pycache__/
+
+
+*.parquet
+*.mp4
+*.png
+*.jpg
+*.txt
+*.pdf
+*.xlsx
+*.csv
+*.pth
+*.log
+*.db
