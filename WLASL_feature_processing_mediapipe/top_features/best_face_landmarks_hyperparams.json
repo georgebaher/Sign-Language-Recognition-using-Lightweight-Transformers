@@ -1,0 +1,8 @@
+{
+    "classifier__max_depth": null,
+    "classifier__max_features": "sqrt",
+    "classifier__n_estimators": 100,
+    "univariate__k": 4150,
+    "best_val_accuracy": 0.1213,
+    "test_accuracy": 0.0698
+}

@@ -1,0 +1,8 @@
+{
+    "classifier__max_depth": 20,
+    "classifier__max_features": "log2",
+    "classifier__n_estimators": 300,
+    "univariate__k": 950,
+    "best_val_accuracy": 0.5473,
+    "test_accuracy": 0.5388
+}
