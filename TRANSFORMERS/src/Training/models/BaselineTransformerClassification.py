@@ -40,45 +40,41 @@ class BaselineTransformerClassification(nn.Module):
         self.linear_class = nn.Linear(hidden_dim, num_classes)
         print(f"[INFO] Transformer model initialized with {'no ' if not w_pe else ''}positional encoding")
 
-    def forward(self, inputs):
-        h = inputs.float()  # [B, T, D]
-        # print(h.shape)
+    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
+        B, T, D = inputs.shape
 
-        # Create a mask where all top_features in a timestep are -2 → it's a padding frame
-        src_key_padding_mask = (inputs == -2).all(dim=-1)  # shape: [batch_size, seq_len]
-        is_fully_padded = src_key_padding_mask.all(dim=1)  # [B], True for sequences that are all padding
+        # Build masks
+        src_key_padding_mask = (inputs == -2).all(dim=-1)  # [B, T] bool
+        src_key_padding_mask = src_key_padding_mask.to(dtype=torch.bool, device=inputs.device)
+        is_fully_padded = src_key_padding_mask.all(dim=1)  # [B]
 
-        # Replace all -2 values (missing top_features) with 0
+        # Replace sentinel then add PE
+        h = inputs.float().clone()
         h[h == -2] = 0.0
+        henc = self.output_pos_encoding(h)  # [B, T, D]
 
-        # # Subtract 0.5 from all top_features
-        # h = h - 0.5
+        # Safe encoding: skip transformer for fully-padded rows
+        if is_fully_padded.any():
+            memory = henc.new_zeros(B, T, D)
+            valid = ~is_fully_padded
+            if valid.any():
+                memory[valid] = self.transformer(
+                    henc[valid], henc[valid],
+                    src_key_padding_mask=src_key_padding_mask[valid],
+                    tgt_key_padding_mask=src_key_padding_mask[valid],
+                    memory_key_padding_mask=src_key_padding_mask[valid],
+                )
+        else:
+            memory = self.transformer(
+                henc, henc,
+                src_key_padding_mask=src_key_padding_mask,
+                tgt_key_padding_mask=src_key_padding_mask,
+                memory_key_padding_mask=src_key_padding_mask,
+            )
 
-        # # 🔍 Check input variation per sample
-        # print("Input mean:", h.mean(dim=[1, 2]))
-        # print("Input std:", h.std(dim=[1, 2]))
+        # Masked average pooling
+        valid_mask = (~src_key_padding_mask).unsqueeze(-1).float()  # [B, T, 1]
+        pooled = (memory * valid_mask).sum(dim=1) / valid_mask.sum(dim=1).clamp_min(1e-9)
 
-        # Apply positional encoding
-        henc = self.output_pos_encoding(h)
+        return self.linear_class(pooled)
 
-        h = self.transformer(henc, henc, src_key_padding_mask=src_key_padding_mask)
-
-        # *** FIX NaN issue ***
-        h[is_fully_padded] = 0.0
-
-        # 6. Perform robust masked average pooling (The Accuracy Fix)
-        # Create a mask to zero out padded time steps for all sequences
-        output_mask = (~src_key_padding_mask).unsqueeze(-1).float()  # [B, T, 1]
-
-        # Sum only the valid time steps (padded steps are zeroed out)
-        summed_h = torch.sum(h * output_mask, dim=1)  # [B, D]
-
-        # Count valid steps for each sequence, clamp to avoid division by zero
-        valid_step_count = output_mask.sum(dim=1).clamp(min=1e-9)  # [B, 1]
-
-        # Calculate the true average over non-padded steps
-        pooled = summed_h / valid_step_count  # [B, D]
-
-        # 7. Classify
-        res = self.linear_class(pooled)  # [B, n_classes]
-        return res

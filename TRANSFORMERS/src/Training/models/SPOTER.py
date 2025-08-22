@@ -63,33 +63,34 @@ class SPOTERTransformer(nn.Module):
             # # Learnable Positional encoding
             # x = x + self.learnable_pos_embedding[:, :T]
 
-        # Encode sequence
-        memory = self.encoder(x, src_key_padding_mask=pad_mask)
-
-        # # --- DEBUG: Check for NaNs in encoder output ---
-        # nan_mask = torch.isnan(memory)  # [B, T, D]
-        # if nan_mask.any():
-        #     print("[DEBUG] NaNs detected in encoder output (memory)!")
-
-
-        # # Repeat learnable class token across batch
-        # query = self.class_query.expand(B, -1, -1)  # [B, 1, D]
-
-        # # Decode using class token
-        # output = self.decoder(query, memory, memory_key_padding_mask=pad_mask)  # [B, 1, D]
-        #
-        # # Classify
-        # logits = self.classifier(output.squeeze(1))  # [B, num_classes]
-        # return logits
-
-        # *** FIX NaN issue ***
-        # Sanitize the encoder's output. Replace NaN rows with zeros.
-        # This is the key step to prevent NaN propagation to the decoder.
-        memory[is_fully_padded] = 0
+        if is_fully_padded.any():
+            memory = x.new_zeros(B, T, D)
+            valid = ~is_fully_padded
+            if valid.any():
+                memory[valid] = self.encoder(
+                    x[valid],
+                    src_key_padding_mask=pad_mask[valid]
+                )
+        else:
+            memory = self.encoder(x, src_key_padding_mask=pad_mask)
 
         # Proceed with the decoder using the sanitized memory
-        query = self.class_query.expand(B, -1, -1)
-        output = self.decoder(query, memory, memory_key_padding_mask=pad_mask)
+        query = self.class_query.expand(B, -1, -1)  # [B, 1, D]
+        if is_fully_padded.any():
+            output = query.new_zeros(B, 1, query.size(-1))
+            valid = ~is_fully_padded
+            if valid.any():
+                output[valid] = self.decoder(
+                    query[valid],
+                    memory[valid],
+                    memory_key_padding_mask=pad_mask[valid]
+                )
+        else:
+            output = self.decoder(
+                query,
+                memory,
+                memory_key_padding_mask=pad_mask
+            )
 
         # Classify
         logits = self.classifier(output.squeeze(1))

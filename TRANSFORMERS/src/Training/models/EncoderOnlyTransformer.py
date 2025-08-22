@@ -41,55 +41,44 @@ class EncoderOnly(nn.Module):
 
         self.classifier = nn.Linear(hidden_dim, num_classes)
 
-    def forward(self, x):
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        x: [B, T, D] with padded timesteps filled by -2 in all D features.
+        Returns logits: [B, num_classes]
+        """
         B, T, D = x.shape
 
-        # Padding mask: True where padding
-        pad_mask = (x == -2).all(dim=-1)  # [B, T]
-        is_fully_padded = pad_mask.all(dim=1)  # [B], True for sequences that are all padding
+        # pad_mask: [B, T], True where padded
+        pad_mask = (x == -2).all(dim=-1)  # True at timestep if it's all padding
+        is_fully_padded = pad_mask.all(dim=1)  # [B], True if *entire* sequence is padding
 
-        # Replace missing values with 0
+        # Replace padding sentinel with zeros before encoding
         x = x.clone()
         x[x == -2] = 0.0
 
-        # Positional encoding
         if self.w_pe:
             # Sin-Cos Positional encoding
             x = self.sin_cos_pos_embedding(x)
+
             # # Learnable Positional encoding
             # x = x + self.learnable_pos_embedding[:, :T]
 
-        # *** FIX NaN issue ***
-        #  Encode sequence.
-        # Note: 'memory' will contain NaN rows where 'is_fully_padded' is True.
-        memory = self.encoder(x, src_key_padding_mask=pad_mask)  # [B, T, D]
+        # ---- Safe encoding: skip encoder for fully-padded sequences to avoid NaN softmax ----
+        if is_fully_padded.any():
+            memory = x.new_zeros(B, T, D)  # fill fully-padded sequences with zeros
+            valid = ~is_fully_padded
+            if valid.any():
+                memory[valid] = self.encoder(
+                    x[valid],
+                    src_key_padding_mask=pad_mask[valid]
+                )
+        else:
+            memory = self.encoder(x, src_key_padding_mask=pad_mask)
 
-        # Fix NaNs and perform correct masked average pooling.
+        # Masked average pooling
+        valid_mask = (~pad_mask).unsqueeze(-1).float()  # [B, T, 1]
+        pooled = (memory * valid_mask).sum(dim=1) / valid_mask.sum(dim=1).clamp_min(1e-9)
 
-        # First, explicitly replace the NaN rows with zeros. This fixes the primary issue.
-        # If a sequence contained no information, its feature representation should be zero.
-        memory[is_fully_padded] = 0.0
-
-        # Second, correctly average only over the non-padded time steps.
-        # This is more accurate than a simple torch.mean() and improves performance.
-
-        # Create a mask for broadcasting: [B, T] -> [B, T, 1]
-        # `~pad_mask` is True for valid tokens.
-        output_mask = (~pad_mask).unsqueeze(-1).float()
-
-        # Zero out the memory values at padded positions for all sequences
-        masked_memory = memory * output_mask
-
-        # Sum the valid time steps
-        summed_memory = torch.sum(masked_memory, dim=1)  # Shape: [B, D]
-
-        # Count the number of valid time steps for each sequence.
-        # Use clamp to prevent division by zero for fully padded sequences.
-        valid_step_count = output_mask.sum(dim=1)  # Shape: [B, 1]
-        valid_step_count = valid_step_count.clamp(min=1e-9)
-
-        # Calculate the masked average
-        pooled = summed_memory / valid_step_count  # Shape: [B, D]
-
-        # Classify the pooled representation
         return self.classifier(pooled)
+

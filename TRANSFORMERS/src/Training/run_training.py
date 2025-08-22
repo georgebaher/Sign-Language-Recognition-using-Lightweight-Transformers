@@ -39,10 +39,10 @@ from src.Training.models.SPOTER import SPOTERTransformer
 from src.Training.models.LSTM import LSTMClassifier
 from src.Training.models.BiLSTM import BiLSTMClassifier
 from src.Training.models.EncoderOnlyTransformer import EncoderOnly
-# from src.Training.models.LateFusionLogitEncoderWeightedSumWithLinearProjection import LateFusionEncoder
-# from src.Training.models.LateFusionLogitEncoderWeightedSumNoLinearProjection import LateFusionEncoder
-from src.Training.models.LateFusionLogitEncoderWeightedSumNoLinearProjection import LateFusionEncoder
-from src.Training.models.LateFusionModelUsingPretrainedEncodersWeightedSum import LateFusionPET
+
+from src.Training.models.LateFusionLogitEncoderWeightedSum import LateFusionEncoder
+from src.Training.models.LateFusionLogitEncoderConcat import LateFusionEncoder
+# from src.Training.models.LateFusionModelUsingPretrainedEncodersWeightedSum import LateFusionPET
 # from src.Training.models.LateFusionModelUsingPretrainedEncodersConcat import LateFusionPET
 
 def setup_logging(log_dir, experiment_name):
@@ -92,7 +92,6 @@ def get_args_parser():
     parser.add_argument("--hand_input_dim", type=int, default=84)
     parser.add_argument("--pose_input_dim", type=int, default=50)
     parser.add_argument("--face_input_dim", type=int, default=52)
-    parser.add_argument("--scaled_hidden_dim", type=int, default=84)
     parser.add_argument("--debug", action="store_true")
     ###############################################################################################################
 
@@ -235,10 +234,10 @@ def train(args):
         model = EncoderOnly(num_classes=num_classes, hidden_dim=hidden_dim, num_layers=args.n_layers,
                             n_heads=args.n_heads, w_pe=bool(args.pe))
     elif args.model == 'latefusion_encoder':
-        if not all([args.hand_input_dim, args.pose_input_dim, args.face_input_dim, args.scaled_hidden_dim]):
-            raise ValueError("For --model latefusion_encoder, you must provide all input dims and a scaled_hidden_dim.")
+        if not all([args.hand_input_dim, args.pose_input_dim, args.face_input_dim]):
+            raise ValueError("For --model latefusion_encoder, you must provide all input dims .")
         model = LateFusionEncoder(hand_input_dim=args.hand_input_dim, pose_input_dim=args.pose_input_dim,
-                                  face_input_dim=args.face_input_dim, hidden_dim=args.scaled_hidden_dim,
+                                  face_input_dim=args.face_input_dim,
                                   num_classes=num_classes, n_heads=args.n_heads, num_layers=args.n_layers,
                                   debug=args.debug)
     elif args.model == 'latefusion_pet':

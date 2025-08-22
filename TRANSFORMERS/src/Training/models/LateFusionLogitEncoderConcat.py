@@ -64,6 +64,7 @@ class LateFusionEncoder(nn.Module):
     def _process_stream(self, x: torch.Tensor, stream_name: str, padded_dim: int, encoder: nn.TransformerEncoder,
                         classifier: nn.Linear) -> torch.Tensor:
         """Helper function to pad, process, and classify one modality stream."""
+        B, T, D = x.shape
         pad_mask = (x == -2).all(dim=-1)
         is_fully_padded = pad_mask.all(dim=1)
         x = x.clone();
@@ -76,8 +77,17 @@ class LateFusionEncoder(nn.Module):
         if self.debug:
             print(f"[DEBUG] {stream_name} stream shape after padding: {x.shape}")
 
-        memory = encoder(x, src_key_padding_mask=pad_mask)
-        memory[is_fully_padded] = 0.0 # for NaN losses issue
+        # ---- Safe encoding: skip encoder for fully-padded sequences to avoid NaN softmax ----
+        if is_fully_padded.any():
+            memory = x.new_zeros(B, T, D+num_to_pad)  # fill fully-padded sequences with zeros
+            valid = ~is_fully_padded
+            if valid.any():
+                memory[valid] = encoder(
+                    x[valid],
+                    src_key_padding_mask=pad_mask[valid]
+                )
+        else:
+            memory = encoder(x, src_key_padding_mask=pad_mask)
 
         output_mask = (~pad_mask).unsqueeze(-1).float()
         pooled = torch.sum(memory * output_mask, dim=1) / output_mask.sum(dim=1).clamp(min=1e-9)
