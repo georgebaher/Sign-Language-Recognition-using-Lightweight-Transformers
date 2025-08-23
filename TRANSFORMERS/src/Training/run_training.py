@@ -41,8 +41,8 @@ from src.Training.models.BiLSTM import BiLSTMClassifier
 from src.Training.models.EncoderOnlyTransformer import EncoderOnly
 
 from src.Training.models.LateFusionLogitEncoderWeightedSum import LateFusionEncoder
-from src.Training.models.LateFusionLogitEncoderConcat import LateFusionEncoder
-# from src.Training.models.LateFusionModelUsingPretrainedEncodersWeightedSum import LateFusionPET
+# from src.Training.models.LateFusionLogitEncoderConcat import LateFusionEncoder
+from src.Training.models.LateFusionModelUsingPretrainedEncodersWeightedSum import LateFusionPET
 # from src.Training.models.LateFusionModelUsingPretrainedEncodersConcat import LateFusionPET
 
 def setup_logging(log_dir, experiment_name):

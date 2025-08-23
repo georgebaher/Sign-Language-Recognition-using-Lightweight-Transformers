@@ -2,6 +2,10 @@
 __pycache__/
 
 ViTPose/
+AVASAG_feature_processing_mediapipe/
+AVASAG_feature_processing_vitpose/
+WLASL_feature_processing_mediapipe/
+WLASL_feature_processing_vitpose/
 
 *.parquet
 *.mp4
