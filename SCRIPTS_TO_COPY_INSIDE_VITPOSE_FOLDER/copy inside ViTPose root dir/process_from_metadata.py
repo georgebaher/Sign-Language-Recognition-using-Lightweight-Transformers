@@ -32,10 +32,10 @@ def main():
 
     # --- Optional Arguments (pass-through to utils) ---
     parser.add_argument('--det-config', default='demo/mmdetection_cfg/yolox_l_8x8_300e_coco.py')
-    parser.add_argument('--det-checkpoint', default='models/yolox_l_8x8_300e_coco_20211126_140236-d3bd2b23.pth')
+    parser.add_argument('--det-checkpoint', default='yolox_l_8x8_300e_coco_20211126_140236-d3bd2b23.pth')
     parser.add_argument('--pose-config',
                         default='configs/wholebody/2d_kpt_sview_rgb_img/topdown_heatmap/coco-wholebody/ViTPose_large_wholebody_256x192.py')
-    parser.add_argument('--pose-checkpoint', default='models/wholebody.pth')
+    parser.add_argument('--pose-checkpoint', default='wholebody.pth')
     parser.add_argument('--device', default='cuda:0')
     parser.add_argument('--bbox-thr', type=float, default=0.5)
     parser.add_argument('--conf-thr', type=float, default=0.5)
