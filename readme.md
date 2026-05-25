@@ -72,7 +72,7 @@ from src.Training.models.LateFusionModelUsingPretrainedEncodersWeightedSum impor
 | `--model` | `baseline_transformer` \| `spoter` \| `lstm` \| `bilstm` \| `encoder` \| `latefusion_encoder` \| `latefusion_pet` | `baseline_transformer` |
 | `--n_heads` | Attention heads. | `8` |
 | `--n_layers` | Transformer layers. | `6` |
-| `--pe` | Positional encoding: `0` off, `1` on. | `0` |
+| `--pe` | Positional encoding kind: `sincos` \| `learnable` \| `none`. | `sincos` |
 | `--debug` | Verbose forward-pass prints. | off |
 
 #### Late-fusion-specific

@@ -106,7 +106,7 @@ def get_args_parser():
 
     parser.add_argument("--n_heads", type=int, default=8)
     parser.add_argument("--n_layers", type=int, default=6)
-    parser.add_argument("--pe", type=int, default=0)
+    parser.add_argument("--pe", type=str, default="sincos", choices=["sincos", "learnable", "none"])
     parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--batch_size", type=int, default=32)
     parser.add_argument("--lr", type=float, default=1e-4)
@@ -221,17 +221,17 @@ def train(args):
 
     if args.model == 'baseline_transformer':
         model = BaselineTransformerClassification(num_classes=num_classes, hidden_dim=hidden_dim,
-                                                  num_layers=args.n_layers, n_heads=args.n_heads, w_pe=bool(args.pe))
+                                                  num_layers=args.n_layers, n_heads=args.n_heads, pe=args.pe)
     elif args.model == 'spoter':
         model = SPOTERTransformer(num_classes=num_classes, hidden_dim=hidden_dim, num_layers=args.n_layers,
-                                  n_heads=args.n_heads, w_pe=bool(args.pe))
+                                  n_heads=args.n_heads, pe=args.pe)
     elif args.model == 'lstm':
         model = LSTMClassifier(input_dim=input_dim, hidden_dim=hidden_dim, num_classes=num_classes)
     elif args.model == "bilstm":
         model = BiLSTMClassifier(input_dim=input_dim, hidden_dim=hidden_dim, num_classes=num_classes)
     elif args.model == 'encoder':
         model = EncoderOnly(num_classes=num_classes, hidden_dim=hidden_dim, num_layers=args.n_layers,
-                            n_heads=args.n_heads, w_pe=bool(args.pe))
+                            n_heads=args.n_heads, pe=args.pe)
     elif args.model == 'latefusion_encoder':
         if not all([args.hand_input_dim, args.pose_input_dim, args.face_input_dim]):
             raise ValueError("For --model latefusion_encoder, you must provide all input dims .")
