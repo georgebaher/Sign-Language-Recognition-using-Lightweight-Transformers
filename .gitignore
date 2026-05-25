@@ -1,11 +1,17 @@
 .idea/
 __pycache__/
 
-ViTPose/
+# Pre-processed dataset folders (kept outside the repo under BASE_DIR)
 AVASAG_feature_processing_mediapipe/
 AVASAG_feature_processing_vitpose/
 WLASL_feature_processing_mediapipe/
 WLASL_feature_processing_vitpose/
+
+# Training outputs
+out-logs/
+out-checkpoints/
+out-img/
+evaluation_results/
 
 *.parquet
 *.mp4
@@ -18,5 +24,3 @@ WLASL_feature_processing_vitpose/
 *.pth
 *.log
 *.db
-plot_fusion_results.py
-plot_fusion_weights.py

@@ -27,23 +27,22 @@ import seaborn as sns
 
 
 # --- Add the project's root directory to the Python path ---
-# This allows the script to find the 'src' and 'dataset' modules.
-# It assumes the script is in a directory like 'project_root/src/Training/'.
-project_root = Path(__file__).resolve().parents[2]
+# Script lives at <repo_root>/src/run_training.py.
+project_root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(project_root))
 
-from src.Training.dataset.SLFeaturesDataset import SignLanguageFeaturesDataset
-from src.Training.trainingUtils.utils import train_epoch_batch, evaluate_batch
-from src.Training.models.BaselineTransformerClassification import BaselineTransformerClassification
-from src.Training.models.SPOTER import SPOTERTransformer
-from src.Training.models.LSTM import LSTMClassifier
-from src.Training.models.BiLSTM import BiLSTMClassifier
-from src.Training.models.EncoderOnlyTransformer import EncoderOnly
+from src.dataset.SLFeaturesDataset import SignLanguageFeaturesDataset
+from src.utils import train_epoch_batch, evaluate_batch
+from src.models.BaselineTransformerClassification import BaselineTransformerClassification
+from src.models.SPOTER import SPOTERTransformer
+from src.models.LSTM import LSTMClassifier
+from src.models.BiLSTM import BiLSTMClassifier
+from src.models.EncoderOnlyTransformer import EncoderOnly
 
-from src.Training.models.LateFusionLogitEncoderWeightedSum import LateFusionEncoder
-# from src.Training.models.LateFusionLogitEncoderConcat import LateFusionEncoder
-from src.Training.models.LateFusionModelUsingPretrainedEncodersWeightedSum import LateFusionPET
-# from src.Training.models.LateFusionModelUsingPretrainedEncodersConcat import LateFusionPET
+from src.models.LateFusionLogitEncoderWeightedSum import LateFusionEncoder
+# from src.models.LateFusionLogitEncoderConcat import LateFusionEncoder
+from src.models.LateFusionModelUsingPretrainedEncodersWeightedSum import LateFusionPET
+# from src.models.LateFusionModelUsingPretrainedEncodersConcat import LateFusionPET
 
 def setup_logging(log_dir, experiment_name):
     """Configures a logger to write to a file and the console."""
