@@ -61,11 +61,10 @@ def setup_logging(log_dir, experiment_name):
     return logger
 
 
-def load_expert_encoder(ckpt_path, num_classes, hidden_dim, n_heads, num_layers, device):
-    expert_model = EncoderOnly(num_classes=num_classes, hidden_dim=hidden_dim, n_heads=n_heads,
-                               num_layers=num_layers)
+def load_expert_encoder(ckpt_path, input_dim, num_classes, hidden_dim, n_heads, num_layers, device):
+    expert_model = EncoderOnly(input_dim=input_dim, num_classes=num_classes, hidden_dim=hidden_dim,
+                               n_heads=n_heads, num_layers=num_layers)
     state_dict = torch.load(ckpt_path, map_location=device)
-    # print(state_dict.keys())
     expert_model.load_state_dict(state_dict)
     expert_model.to(device)
     return expert_model
@@ -80,10 +79,7 @@ def get_args_parser():
     parser.add_argument("--feature_extraction_model", type=str, default="vitpose", choices=["vitpose", "mediapipe"])
     parser.add_argument("--n_glosses", type=int, default=100)
     parser.add_argument("--features", nargs='+', required=True)
-    # parser.add_argument("--trim_wlasl_pose_landmarks_to_be_like_vitpose", action='store_true')
     parser.add_argument("--fs", type=int, default=0)
-    parser.add_argument("--feature_padding_mode", type=str, default="sentinel",
-                        choices=["sentinel", "repeat", "truncate"])
 
     ############################## late fusion encoder specific args ###############################################
     parser.add_argument("--model", type=str, default="baseline_transformer",
@@ -99,11 +95,9 @@ def get_args_parser():
     parser.add_argument("--hand_ckpt_path", type=str, help="Path to the pre-trained hand expert model.")
     parser.add_argument("--pose_ckpt_path", type=str, help="Path to the pre-trained pose expert model.")
     parser.add_argument("--face_ckpt_path", type=str, help="Path to the pre-trained face expert model.")
-    parser.add_argument("--pet_hidden_dim_hand", type=int, help="The hidden_dim the hand expert was trained with. THIS INCLUDES PADDING DIMENSION.")
-    parser.add_argument("--pet_hidden_dim_pose", type=int, help="The hidden_dim the pose expert was trained with. THIS INCLUDES PADDING DIMENSION.")
-    parser.add_argument("--pet_hidden_dim_face", type=int, help="The hidden_dim the face expert was trained with. THIS INCLUDES PADDING DIMENSION.")
     #####################################################################################################################
 
+    parser.add_argument("--hidden_dim", type=int, default=256, help="Fixed model hidden dimension (input embedding output, transformer d_model).")
     parser.add_argument("--n_heads", type=int, default=8)
     parser.add_argument("--n_layers", type=int, default=6)
     parser.add_argument("--pe", type=str, default="sincos", choices=["sincos", "learnable", "none"])
@@ -179,31 +173,11 @@ def train(args):
     base_path = os.getenv(f"{args.dataset_name.upper()}_{args.feature_extraction_model.upper()}_BASE_PATH")
     fs_dir = os.getenv(f"{args.dataset_name.upper()}_{args.feature_extraction_model.upper()}_TOP_FEATURES_DIR")
 
-    #################################################################################
-    pose_landmark_file = "POSE_LANDMARKS.parquet"
-
-    # # For a fair comparison, if using MediaPipe, switch to a pre-processed
-    # # version of its landmarks that mimics ViTPose's output.
-    # if args.feature_extraction_model.lower() == "mediapipe" and args.trim_wlasl_pose_landmarks_to_be_like_vitpose:
-    #     pose_landmark_file = "POSE_LANDMARKS_VITLIKE.parquet"
-    # if "pose_landmarks" in args.features:
-    #     print(f"Selected Pose Landmark file: {pose_landmark_file}")
-    #     logger.info(f"Selected Pose Landmark file: {pose_landmark_file}")
-    #################################################################################
-
-    # # #################################################################################
-    # # Special case for AVASAG, always use hand landmarks extracted by ViTpose.
-    # avasag_hand_landmark_file = os.path.join(os.getenv(f"AVASAG_VITPOSE_BASE_PATH"), "HAND_LANDMARKS.parquet")
-    # if "hand_landmarks" in args.features:
-    #     print(f"Selected Hand Landmark file specifically for AVASAG: {avasag_hand_landmark_file}")
-    #     logger.info(f"Selected Hand Landmark file specifically for AVASAG: {avasag_hand_landmark_file}")
-    # # #################################################################################
     dataloader_args = {
         "metadata_json_path": os.getenv(f"{args.dataset_name.upper()}_METADATA_PATH"),
         "features": args.features, "n_glosses": args.n_glosses,
         "fs": args.fs, "feature_selection_dir": fs_dir if args.fs else None,
-        "n_heads": args.n_heads, "feature_padding_mode": args.feature_padding_mode,
-        "pose_landmark_path": os.path.join(base_path, pose_landmark_file),
+        "pose_landmark_path": os.path.join(base_path, "POSE_LANDMARKS.parquet"),
         "hand_landmark_path": os.path.join(base_path, "HAND_LANDMARKS.parquet"),
         "face_landmark_path": os.path.join(base_path, "FACE_LANDMARKS.parquet"),
         "pose_angle_path": os.path.join(base_path, "POSE_ANGLES.parquet"),
@@ -216,38 +190,40 @@ def train(args):
     # We build a temporary dataset just to infer dimensions
     temp_dataset = SignLanguageFeaturesDataset(**dataloader_args, split='val')
     input_dim, num_classes = temp_dataset.feature_dim, len(temp_dataset.gloss2idx)
-    hidden_dim = input_dim
     del temp_dataset  # Free up memory
 
     if args.model == 'baseline_transformer':
-        model = BaselineTransformerClassification(num_classes=num_classes, hidden_dim=hidden_dim,
-                                                  num_layers=args.n_layers, n_heads=args.n_heads, pe=args.pe)
+        model = BaselineTransformerClassification(input_dim=input_dim, num_classes=num_classes,
+                                                  hidden_dim=args.hidden_dim, num_layers=args.n_layers,
+                                                  n_heads=args.n_heads, pe=args.pe)
     elif args.model == 'spoter':
-        model = SPOTERTransformer(num_classes=num_classes, hidden_dim=hidden_dim, num_layers=args.n_layers,
-                                  n_heads=args.n_heads, pe=args.pe)
+        model = SPOTERTransformer(input_dim=input_dim, num_classes=num_classes, hidden_dim=args.hidden_dim,
+                                  num_layers=args.n_layers, n_heads=args.n_heads, pe=args.pe)
     elif args.model == 'lstm':
-        model = LSTMClassifier(input_dim=input_dim, hidden_dim=hidden_dim, num_classes=num_classes)
+        model = LSTMClassifier(input_dim=input_dim, hidden_dim=args.hidden_dim, num_classes=num_classes)
     elif args.model == "bilstm":
-        model = BiLSTMClassifier(input_dim=input_dim, hidden_dim=hidden_dim, num_classes=num_classes)
+        model = BiLSTMClassifier(input_dim=input_dim, hidden_dim=args.hidden_dim, num_classes=num_classes)
     elif args.model == 'encoder':
-        model = EncoderOnly(num_classes=num_classes, hidden_dim=hidden_dim, num_layers=args.n_layers,
-                            n_heads=args.n_heads, pe=args.pe)
+        model = EncoderOnly(input_dim=input_dim, num_classes=num_classes, hidden_dim=args.hidden_dim,
+                            num_layers=args.n_layers, n_heads=args.n_heads, pe=args.pe)
     elif args.model == 'latefusion_encoder':
         if not all([args.hand_input_dim, args.pose_input_dim, args.face_input_dim]):
             raise ValueError("For --model latefusion_encoder, you must provide all input dims .")
         model = LateFusionEncoder(hand_input_dim=args.hand_input_dim, pose_input_dim=args.pose_input_dim,
                                   face_input_dim=args.face_input_dim,
-                                  num_classes=num_classes, n_heads=args.n_heads, num_layers=args.n_layers,
+                                  num_classes=num_classes, hidden_dim=args.hidden_dim,
+                                  n_heads=args.n_heads, num_layers=args.n_layers,
                                   debug=args.debug)
     elif args.model == 'latefusion_pet':
-        if not all([args.hand_ckpt_path, args.pose_ckpt_path, args.face_ckpt_path, args.hand_input_dim, args.pose_input_dim, args.face_input_dim, args.pet_hidden_dim_hand, args.pet_hidden_dim_pose, args.pet_hidden_dim_face]):
-            raise ValueError("For --model pet_encoder, you must provide checkpoint paths for all three experts.")
-        hand_expert = load_expert_encoder(args.hand_ckpt_path, args.n_glosses, args.pet_hidden_dim_hand, args.n_heads, args.n_layers,
-                                          device)
-        pose_expert = load_expert_encoder(args.pose_ckpt_path, args.n_glosses, args.pet_hidden_dim_pose, args.n_heads, args.n_layers,
-                                          device)
-        face_expert = load_expert_encoder(args.face_ckpt_path, args.n_glosses, args.pet_hidden_dim_face, args.n_heads, args.n_layers,
-                                          device)
+        if not all([args.hand_ckpt_path, args.pose_ckpt_path, args.face_ckpt_path,
+                    args.hand_input_dim, args.pose_input_dim, args.face_input_dim]):
+            raise ValueError("For --model latefusion_pet, you must provide checkpoint paths and per-modality input dims for all three experts.")
+        hand_expert = load_expert_encoder(args.hand_ckpt_path, args.hand_input_dim, args.n_glosses,
+                                          args.hidden_dim, args.n_heads, args.n_layers, device)
+        pose_expert = load_expert_encoder(args.pose_ckpt_path, args.pose_input_dim, args.n_glosses,
+                                          args.hidden_dim, args.n_heads, args.n_layers, device)
+        face_expert = load_expert_encoder(args.face_ckpt_path, args.face_input_dim, args.n_glosses,
+                                          args.hidden_dim, args.n_heads, args.n_layers, device)
 
         model = LateFusionPET(
             hand_expert=hand_expert,

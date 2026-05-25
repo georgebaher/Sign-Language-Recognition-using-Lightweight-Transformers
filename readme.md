@@ -64,13 +64,13 @@ from src.Training.models.LateFusionModelUsingPretrainedEncodersWeightedSum impor
 | `--n_glosses` | Number of glosses (classes). | `100` |
 | `--features` | Space-separated list, e.g. `hand_landmarks pose_landmarks face_blendshapes`. | required |
 | `--fs` | `1` to use the bundled top-features lists, `0` for all features. | `0` |
-| `--feature_padding_mode` | `sentinel` \| `repeat` \| `truncate`. | `sentinel` |
 
 #### Model architecture
 | Flag | Description | Default |
 |---|---|---|
 | `--model` | `baseline_transformer` \| `spoter` \| `lstm` \| `bilstm` \| `encoder` \| `latefusion_encoder` \| `latefusion_pet` | `baseline_transformer` |
-| `--n_heads` | Attention heads. | `8` |
+| `--hidden_dim` | Model hidden dimension (output of the input `nn.Linear` embedding, transformer `d_model`). | `256` |
+| `--n_heads` | Attention heads. Must divide `--hidden_dim`. | `8` |
 | `--n_layers` | Transformer layers. | `6` |
 | `--pe` | Positional encoding kind: `sincos` \| `learnable` \| `none`. | `sincos` |
 | `--debug` | Verbose forward-pass prints. | off |
@@ -78,9 +78,8 @@ from src.Training.models.LateFusionModelUsingPretrainedEncodersWeightedSum impor
 #### Late-fusion-specific
 | Flag | Description |
 |---|---|
-| `--hand_input_dim`, `--pose_input_dim`, `--face_input_dim` | **Required for `latefusion_encoder` / `latefusion_pet`.** Tell the model how to slice the input tensor. Defaults: `84`, `50`, `52`. |
-| `--hand_ckpt_path`, `--pose_ckpt_path`, `--face_ckpt_path` | **Required for `latefusion_pet`.** Paths to the pre-trained expert encoder checkpoints. |
-| `--pet_hidden_dim_hand`, `--pet_hidden_dim_pose`, `--pet_hidden_dim_face` | **Required for `latefusion_pet`.** Hidden dimension (incl. padding) the experts were trained with. |
+| `--hand_input_dim`, `--pose_input_dim`, `--face_input_dim` | **Required for `latefusion_encoder` / `latefusion_pet`.** Tell the model how to slice the early-fused input tensor. Defaults: `84`, `50`, `52`. |
+| `--hand_ckpt_path`, `--pose_ckpt_path`, `--face_ckpt_path` | **Required for `latefusion_pet`.** Paths to the pre-trained expert encoder checkpoints. The experts must have been trained with the same `--hidden_dim` you pass here. |
 
 #### Training hyperparameters
 | Flag | Description | Default |
@@ -150,7 +149,6 @@ python src/run_training.py \
     --features "hand_landmarks" "pose_landmarks" "face_blendshapes" \
     --fs 1 \
     --hand_input_dim 84 --pose_input_dim 50 --face_input_dim 52 \
-    --pet_hidden_dim_hand 88 --pet_hidden_dim_pose 52 --pet_hidden_dim_face 52 \
     --hand_ckpt_path "out-checkpoints/mediapipe/WLASL_Hand_Expert/best_model.pth" \
     --pose_ckpt_path "out-checkpoints/mediapipe/WLASL_Pose_Expert/best_model.pth" \
     --face_ckpt_path "out-checkpoints/mediapipe/WLASL_Face_Expert/best_model.pth" \

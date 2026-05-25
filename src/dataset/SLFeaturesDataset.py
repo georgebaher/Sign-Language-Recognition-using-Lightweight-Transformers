@@ -31,9 +31,7 @@ class SignLanguageFeaturesDataset(Dataset):
                  split: str = "train",
                  n_glosses: int = None,
                  fs: int = 0,
-                 max_len: int = None,
-                 feature_padding_mode: str = "sentinel",
-                 n_heads: int = 1):
+                 max_len: int = None):
 
         start_time = time.time()
         print(f"\n--- Initializing Dataset for split: '{split}' | Features: {features} ---")
@@ -43,8 +41,6 @@ class SignLanguageFeaturesDataset(Dataset):
         self.features = features
         self.fs = fs
         self.max_len = max_len
-        self.feature_padding_mode = feature_padding_mode
-        self.n_heads = n_heads
         # To ensure order of concatenation
         self.CANONICAL_MODALITY_ORDER = ["hand_landmarks", "hand_angles", "pose_landmarks", "pose_angles",
                                          "face_landmarks", "face_blendshapes"]
@@ -162,26 +158,8 @@ class SignLanguageFeaturesDataset(Dataset):
                 raise ValueError(
                     f"Feature selection (fs=1) resulted in an empty feature list. Check your top_features files.")
 
-        # 5. Apply feature dimension padding/truncation
-        if self.feature_padding_mode == "truncate":
-            final_dim = (len(cols_to_keep) // self.n_heads) * self.n_heads
-            self.final_columns = cols_to_keep[:final_dim]
-        else:
-            current_dim = len(cols_to_keep)
-            target_dim = ((current_dim + self.n_heads - 1) // self.n_heads) * self.n_heads
-            num_to_pad = target_dim - current_dim
-            if num_to_pad > 0:
-                pad_cols = [f"pad_{i}" for i in range(num_to_pad)]
-                if self.feature_padding_mode == 'sentinel':
-                    for pad_col in pad_cols: features_df[pad_col] = -2.0
-                elif self.feature_padding_mode == 'repeat':
-                    pad_source = [cols_to_keep[i % len(cols_to_keep)] for i in range(num_to_pad)]
-                    for new, source in zip(pad_cols, pad_source):
-                        features_df[new] = features_df[source]
-                self.final_columns = cols_to_keep + pad_cols
-            else:
-                self.final_columns = cols_to_keep
-
+        # 5. Finalize the feature column list (no feature-dim padding — the model owns the projection)
+        self.final_columns = cols_to_keep
         self.embedding_dim = len(self.final_columns)
 
         # 6. Finalize DataFrame for fast lookups
