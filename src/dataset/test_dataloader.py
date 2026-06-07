@@ -1,214 +1,135 @@
 # test_dataloader.py
 #
-# A comprehensive and professional test script to validate the functionality of the
-# SignLanguageFeaturesDataset class across 24 scenarios for both WLASL and AVASAG.
+# Smoke test for SignLanguageFeaturesDataset. Loads one configuration end-to-end
+# and prints what was read (split sizes, classes, feature columns, sample shape,
+# one DataLoader batch). Run it before launching real experiments to confirm
+# the .env paths, parquet files, and feature combo all wire up correctly.
 
+import argparse
 import os
-import torch
 import sys
+from pathlib import Path
+
 from dotenv import load_dotenv
-from argparse import ArgumentParser
+from torch.utils.data import DataLoader
 
-# Ensure the dataloader can be imported
-sys.path.append('.')
-from SLFeaturesDataset import SignLanguageFeaturesDataset
+# Repo root for src.* imports
+project_root = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(project_root))
 
-# --- Global lists to track the outcome of each test ---
-success_scenarios = []
-failed_scenarios = []
+from src.dataset.SLFeaturesDataset import SignLanguageFeaturesDataset
 
 
-def run_test_scenario(scenario_name, **kwargs):
-    """A helper function to run and validate a single dataloader test."""
-    print(f"\n{'=' * 25} TESTING SCENARIO: {scenario_name} {'=' * 25}")
-    try:
-        dataset = SignLanguageFeaturesDataset(**kwargs)
+def get_parser():
+    p = argparse.ArgumentParser("SignLanguageFeaturesDataset smoke test")
+    p.add_argument("--dataset_name", default="wlasl", choices=["wlasl", "avasag"])
+    p.add_argument("--feature_extraction_model", default="mediapipe", choices=["mediapipe", "vitpose"])
+    p.add_argument("--features", nargs="+", required=True,
+                   help="e.g. hand_landmarks pose_landmarks face_blendshapes")
+    p.add_argument("--n_glosses", type=int, default=10)
+    p.add_argument("--fs", type=int, default=0, help="1 = use bundled top-features lists, 0 = all features")
+    p.add_argument("--batch_size", type=int, default=2)
+    p.add_argument("--max_cols_shown", type=int, default=12,
+                   help="Show this many feature columns before truncating the list.")
+    return p
 
-        if len(dataset) == 0:
-            print("  -> [SUCCESS]: Dataset initialized, but contains 0 instances for this split.")
-            success_scenarios.append(scenario_name)
-            return
 
-        print("\n--- Verifying Feature Columns ---")
-        print(f"  Feature columns being used: {dataset.final_columns}")
-
-        features, label = dataset[0]
-
-        print("\n--- Verifying First Sample ---")
-        print(f"  Features tensor shape: {features.shape}")
-        print(f"  Label tensor value: {label.item()} (Gloss: '{dataset.idx2gloss.get(label.item(), 'N/A')}')")
-
-        expected_shape = (dataset.max_len, dataset.embedding_dim)
-        assert features.shape == expected_shape, \
-            f"Dimension mismatch! Expected {expected_shape}, but got {features.shape}"
-
-        print(f"\n[SUCCESS] SCENARIO '{scenario_name}' PASSED")
-        success_scenarios.append(scenario_name)
-
-    except Exception as e:
-        print(f"\n[FAILED] SCENARIO '{scenario_name}' FAILED")
-        print(f"  -> Error: {e}")
-        failed_scenarios.append(f"{scenario_name} (Error: {e})")
-        # raise e # Uncomment for full traceback
+def _format_columns(cols, limit):
+    """Pretty-print a (possibly long) list of feature-column names."""
+    if len(cols) <= limit:
+        return [f"  [{i:4d}] {c}" for i, c in enumerate(cols)]
+    head, tail = limit // 2, limit - limit // 2
+    lines = [f"  [{i:4d}] {cols[i]}" for i in range(head)]
+    lines.append(f"  ... ({len(cols) - limit} more columns) ...")
+    lines += [f"  [{i:4d}] {cols[i]}" for i in range(len(cols) - tail, len(cols))]
+    return lines
 
 
 def main():
-    """Runs all test scenarios for the SignLanguageFeaturesDataset."""
+    args = get_parser().parse_args()
     load_dotenv()
 
-    parser = ArgumentParser(description="Run test scenarios for the dataloader.")
-    parser.add_argument('--n_glosses', type=int, default=5, help="Number of glosses to use for testing.")
-    args = parser.parse_args()
+    dataset_key = args.dataset_name.upper()
+    backend_key = args.feature_extraction_model.upper()
+    base_path = os.getenv(f"{dataset_key}_{backend_key}_BASE_PATH")
+    fs_dir = os.getenv(f"{dataset_key}_{backend_key}_TOP_FEATURES_DIR")
+    metadata_path = os.getenv(f"{dataset_key}_METADATA_PATH")
 
-    print(f"--- Running all tests using the first {args.n_glosses} glosses from metadata ---")
+    if base_path is None:
+        raise RuntimeError(f"Env var {dataset_key}_{backend_key}_BASE_PATH is not set. Check .env / BASE_DIR.")
+    if metadata_path is None:
+        raise RuntimeError(f"Env var {dataset_key}_METADATA_PATH is not set. Check .env / BASE_DIR.")
 
-    # --- Load all paths from .env and validate them ---
-    required_paths = [
-        "WLASL_METADATA_PATH", "WLASL_TOP_FEATURES_DIR", "WLASL_POSE_LANDMARKS_PATH",
-        "WLASL_HAND_LANDMARKS_PATH", "WLASL_FACE_LANDMARKS_PATH", "WLASL_POSE_ANGLES_PATH",
-        "WLASL_HAND_ANGLES_PATH", "WLASL_FACE_BLENDSHAPES_PATH",
-        "AVASAG_METADATA_PATH", "AVASAG_TOP_FEATURES_DIR", "AVASAG_POSE_LANDMARKS_PATH",
-        "AVASAG_HAND_LANDMARKS_PATH", "AVASAG_FACE_LANDMARKS_PATH", "AVASAG_POSE_ANGLES_PATH",
-        "AVASAG_HAND_ANGLES_PATH", "AVASAG_FACE_BLENDSHAPES_PATH"
-    ]
-    paths = {key: os.getenv(key) for key in required_paths}
-    for key, path in paths.items():
-        if not path or not (os.path.exists(path) or os.path.isdir(path)):
-            print(f"CRITICAL ERROR: Env variable '{key}' not set or path '{path}' does not exist. Halting.")
-            return
+    common = {
+        "metadata_json_path": metadata_path,
+        "features": args.features,
+        "n_glosses": args.n_glosses,
+        "fs": args.fs,
+        "feature_selection_dir": fs_dir if args.fs else None,
+        "pose_landmark_path": os.path.join(base_path, "POSE_LANDMARKS.parquet"),
+        "hand_landmark_path": os.path.join(base_path, "HAND_LANDMARKS.parquet"),
+        "face_landmark_path": os.path.join(base_path, "FACE_LANDMARKS.parquet"),
+        "pose_angle_path": os.path.join(base_path, "POSE_ANGLES.parquet"),
+        "hand_angle_path": os.path.join(base_path, "HAND_ANGLES.parquet"),
+        "face_blendshape_path": os.path.join(base_path, "FACE_BLENDSHAPES.parquet"),
+    }
 
-    # =================================================================
-    #                       WLASL TEST SCENARIOS (12 TOTAL)
-    # =================================================================
+    bar = "=" * 80
+    print(bar)
+    print(f"Dataset : {args.dataset_name} | Backend: {args.feature_extraction_model}")
+    print(f"Features: {args.features}")
+    print(f"fs={bool(args.fs)} | n_glosses={args.n_glosses}")
+    print(f"BASE    : {base_path}")
+    print(bar)
 
-    run_test_scenario("WLASL Pose Landmarks (No FS)", metadata_json_path=paths["WLASL_METADATA_PATH"],
-                      pose_landmark_path=paths["WLASL_POSE_LANDMARKS_PATH"], split="train", features=['pose_landmarks'],
-                      fs=0, n_glosses=args.n_glosses)
-    run_test_scenario("WLASL Pose Landmarks (With FS)", metadata_json_path=paths["WLASL_METADATA_PATH"],
-                      feature_selection_dir=paths["WLASL_TOP_FEATURES_DIR"],
-                      pose_landmark_path=paths["WLASL_POSE_LANDMARKS_PATH"], split="train", features=['pose_landmarks'],
-                      fs=1, n_glosses=args.n_glosses)
-    run_test_scenario("WLASL Pose Angles (No FS)", metadata_json_path=paths["WLASL_METADATA_PATH"],
-                      pose_angle_path=paths["WLASL_POSE_ANGLES_PATH"], split="train", features=['pose_angles'], fs=0,
-                      n_glosses=args.n_glosses)
-    run_test_scenario("WLASL Pose Angles (With FS)", metadata_json_path=paths["WLASL_METADATA_PATH"],
-                      feature_selection_dir=paths["WLASL_TOP_FEATURES_DIR"],
-                      pose_angle_path=paths["WLASL_POSE_ANGLES_PATH"], split="train", features=['pose_angles'], fs=1,
-                      n_glosses=args.n_glosses)
-    run_test_scenario("WLASL Hand Landmarks (No FS)", metadata_json_path=paths["WLASL_METADATA_PATH"],
-                      hand_landmark_path=paths["WLASL_HAND_LANDMARKS_PATH"], split="train", features=['hand_landmarks'],
-                      fs=0, n_glosses=args.n_glosses)
-    run_test_scenario("WLASL Hand Landmarks (With FS)", metadata_json_path=paths["WLASL_METADATA_PATH"],
-                      feature_selection_dir=paths["WLASL_TOP_FEATURES_DIR"],
-                      hand_landmark_path=paths["WLASL_HAND_LANDMARKS_PATH"], split="train", features=['hand_landmarks'],
-                      fs=1, n_glosses=args.n_glosses)
-    run_test_scenario("WLASL Hand Angles (No FS)", metadata_json_path=paths["WLASL_METADATA_PATH"],
-                      hand_angle_path=paths["WLASL_HAND_ANGLES_PATH"], split="train", features=['hand_angles'], fs=0,
-                      n_glosses=args.n_glosses)
-    run_test_scenario("WLASL Hand Angles (With FS)", metadata_json_path=paths["WLASL_METADATA_PATH"],
-                      feature_selection_dir=paths["WLASL_TOP_FEATURES_DIR"],
-                      hand_angle_path=paths["WLASL_HAND_ANGLES_PATH"], split="train", features=['hand_angles'], fs=1,
-                      n_glosses=args.n_glosses)
-    run_test_scenario("WLASL Face Landmarks+Blendshapes (No FS)", metadata_json_path=paths["WLASL_METADATA_PATH"],
-                      face_landmark_path=paths["WLASL_FACE_LANDMARKS_PATH"],
-                      face_blendshape_path=paths["WLASL_FACE_BLENDSHAPES_PATH"], split="test",
-                      features=['face_landmarks', 'face_blendshapes'], fs=0, n_glosses=args.n_glosses)
-    run_test_scenario("WLASL Pose+Hand Landmarks & Blendshapes (With FS)",
-                      metadata_json_path=paths["WLASL_METADATA_PATH"],
-                      feature_selection_dir=paths["WLASL_TOP_FEATURES_DIR"],
-                      pose_landmark_path=paths["WLASL_POSE_LANDMARKS_PATH"],
-                      hand_landmark_path=paths["WLASL_HAND_LANDMARKS_PATH"],
-                      face_blendshape_path=paths["WLASL_FACE_BLENDSHAPES_PATH"], split="val",
-                      features=['pose_landmarks', 'hand_landmarks', 'face_blendshapes'], fs=1,
-                      n_glosses=args.n_glosses)
-    run_test_scenario("WLASL Pose+Hand Angles & Blendshapes (With FS)", metadata_json_path=paths["WLASL_METADATA_PATH"],
-                      feature_selection_dir=paths["WLASL_TOP_FEATURES_DIR"],
-                      pose_angle_path=paths["WLASL_POSE_ANGLES_PATH"], hand_angle_path=paths["WLASL_HAND_ANGLES_PATH"],
-                      face_blendshape_path=paths["WLASL_FACE_BLENDSHAPES_PATH"], split="val",
-                      features=['pose_angles', 'hand_angles', 'face_blendshapes'], fs=1, n_glosses=args.n_glosses)
-    run_test_scenario("WLASL All Features (No FS)", metadata_json_path=paths["WLASL_METADATA_PATH"],
-                      pose_landmark_path=paths["WLASL_POSE_LANDMARKS_PATH"],
-                      hand_landmark_path=paths["WLASL_HAND_LANDMARKS_PATH"],
-                      face_landmark_path=paths["WLASL_FACE_LANDMARKS_PATH"],
-                      pose_angle_path=paths["WLASL_POSE_ANGLES_PATH"], hand_angle_path=paths["WLASL_HAND_ANGLES_PATH"],
-                      face_blendshape_path=paths["WLASL_FACE_BLENDSHAPES_PATH"], split="test",
-                      features=['pose_landmarks', 'hand_landmarks', 'face_landmarks', 'pose_angles', 'hand_angles',
-                                'face_blendshapes'], fs=0, n_glosses=args.n_glosses)
+    sizes = {}
+    train_set = None
+    for split in ["train", "val", "test"]:
+        ds = SignLanguageFeaturesDataset(**common, split=split)
+        sizes[split] = len(ds)
+        if split == "train":
+            train_set = ds
 
-    # =================================================================
-    #                      AVASAG TEST SCENARIOS (12 TOTAL)
-    # =================================================================
+    print()
+    print(bar)
+    print("DATASET SUMMARY")
+    print("-" * 80)
+    print(f"Splits          : train={sizes['train']}, val={sizes['val']}, test={sizes['test']}")
+    print(f"# classes       : {len(train_set.gloss2idx)}")
+    print(f"feature_dim     : {train_set.feature_dim}")
+    print(f"max_len (frames): {train_set.max_len}")
 
-    run_test_scenario("AVASAG Pose Landmarks (No FS)", metadata_json_path=paths["AVASAG_METADATA_PATH"],
-                      pose_landmark_path=paths["AVASAG_POSE_LANDMARKS_PATH"], split="train",
-                      features=['pose_landmarks'], fs=0, n_glosses=args.n_glosses)
-    run_test_scenario("AVASAG Pose Landmarks (With FS)", metadata_json_path=paths["AVASAG_METADATA_PATH"],
-                      feature_selection_dir=paths["AVASAG_TOP_FEATURES_DIR"],
-                      pose_landmark_path=paths["AVASAG_POSE_LANDMARKS_PATH"], split="train",
-                      features=['pose_landmarks'], fs=1, n_glosses=args.n_glosses)
-    run_test_scenario("AVASAG Pose Angles (No FS)", metadata_json_path=paths["AVASAG_METADATA_PATH"],
-                      pose_angle_path=paths["AVASAG_POSE_ANGLES_PATH"], split="train", features=['pose_angles'], fs=0,
-                      n_glosses=args.n_glosses)
-    run_test_scenario("AVASAG Pose Angles (With FS)", metadata_json_path=paths["AVASAG_METADATA_PATH"],
-                      feature_selection_dir=paths["AVASAG_TOP_FEATURES_DIR"],
-                      pose_angle_path=paths["AVASAG_POSE_ANGLES_PATH"], split="train", features=['pose_angles'], fs=1,
-                      n_glosses=args.n_glosses)
-    run_test_scenario("AVASAG Hand Landmarks (No FS)", metadata_json_path=paths["AVASAG_METADATA_PATH"],
-                      hand_landmark_path=paths["AVASAG_HAND_LANDMARKS_PATH"], split="train",
-                      features=['hand_landmarks'], fs=0, n_glosses=args.n_glosses)
-    run_test_scenario("AVASAG Hand Landmarks (With FS)", metadata_json_path=paths["AVASAG_METADATA_PATH"],
-                      feature_selection_dir=paths["AVASAG_TOP_FEATURES_DIR"],
-                      hand_landmark_path=paths["AVASAG_HAND_LANDMARKS_PATH"], split="train",
-                      features=['hand_landmarks'], fs=1, n_glosses=args.n_glosses)
-    run_test_scenario("AVASAG Hand Angles (No FS)", metadata_json_path=paths["AVASAG_METADATA_PATH"],
-                      hand_angle_path=paths["AVASAG_HAND_ANGLES_PATH"], split="train", features=['hand_angles'], fs=0,
-                      n_glosses=args.n_glosses)
-    run_test_scenario("AVASAG Hand Angles (With FS)", metadata_json_path=paths["AVASAG_METADATA_PATH"],
-                      feature_selection_dir=paths["AVASAG_TOP_FEATURES_DIR"],
-                      hand_angle_path=paths["AVASAG_HAND_ANGLES_PATH"], split="train", features=['hand_angles'], fs=1,
-                      n_glosses=args.n_glosses)
-    run_test_scenario("AVASAG Face Landmarks+Blendshapes (No FS)", metadata_json_path=paths["AVASAG_METADATA_PATH"],
-                      face_landmark_path=paths["AVASAG_FACE_LANDMARKS_PATH"],
-                      face_blendshape_path=paths["AVASAG_FACE_BLENDSHAPES_PATH"], split="test",
-                      features=['face_landmarks', 'face_blendshapes'], fs=0, n_glosses=args.n_glosses)
-    run_test_scenario("AVASAG Pose+Hand Landmarks & Blendshapes (With FS)",
-                      metadata_json_path=paths["AVASAG_METADATA_PATH"],
-                      feature_selection_dir=paths["AVASAG_TOP_FEATURES_DIR"],
-                      pose_landmark_path=paths["AVASAG_POSE_LANDMARKS_PATH"],
-                      hand_landmark_path=paths["AVASAG_HAND_LANDMARKS_PATH"],
-                      face_blendshape_path=paths["AVASAG_FACE_BLENDSHAPES_PATH"], split="val",
-                      features=['pose_landmarks', 'hand_landmarks', 'face_blendshapes'], fs=1,
-                      n_glosses=args.n_glosses)
-    run_test_scenario("AVASAG Pose+Hand Angles & Blendshapes (With FS)",
-                      metadata_json_path=paths["AVASAG_METADATA_PATH"],
-                      feature_selection_dir=paths["AVASAG_TOP_FEATURES_DIR"],
-                      pose_angle_path=paths["AVASAG_POSE_ANGLES_PATH"],
-                      hand_angle_path=paths["AVASAG_HAND_ANGLES_PATH"],
-                      face_blendshape_path=paths["AVASAG_FACE_BLENDSHAPES_PATH"], split="val",
-                      features=['pose_angles', 'hand_angles', 'face_blendshapes'], fs=1, n_glosses=args.n_glosses)
-    run_test_scenario("AVASAG All Features (No FS)", metadata_json_path=paths["AVASAG_METADATA_PATH"],
-                      pose_landmark_path=paths["AVASAG_POSE_LANDMARKS_PATH"],
-                      hand_landmark_path=paths["AVASAG_HAND_LANDMARKS_PATH"],
-                      face_landmark_path=paths["AVASAG_FACE_LANDMARKS_PATH"],
-                      pose_angle_path=paths["AVASAG_POSE_ANGLES_PATH"],
-                      hand_angle_path=paths["AVASAG_HAND_ANGLES_PATH"],
-                      face_blendshape_path=paths["AVASAG_FACE_BLENDSHAPES_PATH"], split="test",
-                      features=['pose_landmarks', 'hand_landmarks', 'face_landmarks', 'pose_angles', 'hand_angles',
-                                'face_blendshapes'], fs=0, n_glosses=args.n_glosses)
+    print()
+    print(f"First {min(10, len(train_set.idx2gloss))} gloss labels:")
+    for i in range(min(10, len(train_set.idx2gloss))):
+        print(f"  [{i:2d}] {train_set.idx2gloss[i]}")
 
-    # --- FINAL SUMMARY REPORT ---
-    print("\n\n" + "=" * 30 + " TEST SUMMARY " + "=" * 30)
-    total_tests = len(success_scenarios) + len(failed_scenarios)
-    print(f"Ran {total_tests} scenarios.")
-    print(f"\n[SUCCESS] {len(success_scenarios)} scenarios passed:")
-    for name in success_scenarios:
-        print(f"  - {name}")
+    print()
+    print(f"Feature columns ({len(train_set.final_columns)} total):")
+    for line in _format_columns(train_set.final_columns, args.max_cols_shown):
+        print(line)
 
-    if failed_scenarios:
-        print(f"\n[FAILED] {len(failed_scenarios)} scenarios failed:")
-        for name in failed_scenarios:
-            print(f"  - {name}")
-    print("=" * 74)
+    print()
+    x, y = train_set[0]
+    label_idx = int(y)
+    print("Sample at idx=0:")
+    print(f"  features.shape : {tuple(x.shape)}")
+    print(f"  features.dtype : {x.dtype}")
+    print(f"  label          : {label_idx}  ('{train_set.idx2gloss[label_idx]}')")
+    preview = x[0, : min(8, x.shape[1])].tolist()
+    preview_str = ", ".join(f"{v:.3f}" for v in preview)
+    suffix = " ..." if x.shape[1] > 8 else ""
+    print(f"  features[0,:8] : [{preview_str}{suffix}]")
+
+    print()
+    loader = DataLoader(train_set, batch_size=args.batch_size, shuffle=False)
+    xb, yb = next(iter(loader))
+    print(f"DataLoader (batch_size={args.batch_size}):")
+    print(f"  batch.shape    : {tuple(xb.shape)}")
+    print(f"  labels.shape   : {tuple(yb.shape)}")
+
+    print(bar)
+    print("[OK] Dataset loads cleanly.")
 
 
 if __name__ == "__main__":

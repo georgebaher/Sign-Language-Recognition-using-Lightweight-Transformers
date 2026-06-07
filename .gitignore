@@ -7,6 +7,9 @@ AVASAG_feature_processing_vitpose/
 WLASL_feature_processing_mediapipe/
 WLASL_feature_processing_vitpose/
 
+# Local staging area for Kaggle uploads (preprocessed parquets + zips)
+data/
+
 # Training outputs
 out-logs/
 out-checkpoints/

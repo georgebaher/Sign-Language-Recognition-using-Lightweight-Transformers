@@ -187,7 +187,92 @@ python src/ci_calculator.py --n 1000 --score_pct 60.62
 | `out-img/<backend>/<experiment>/` | Training-curve plots (with `--plot_stats`). |
 | `evaluation_results/` | Confusion matrices from `--evaluate_only` runs. |
 
-## 5. Previous Experiments
+## 5. Running on Kaggle (no local GPU)
+
+These models are small (~8-24M params) and fit comfortably on Kaggle's free P100 / T4. Quota: 30 GPU-hrs/week. A 100-epoch run on a single-modality `encoder` takes ~30-60 minutes.
+
+### 5.1 One-time setup
+
+**(a)** Upload the four pre-processed dataset folders as **one Kaggle Dataset** (e.g. `sl-features`). Keep the folder layout intact:
+
+```
+sl-features/
+├── WLASL_feature_processing_mediapipe/   (data_parquet/, top_features/, WLASL_v0.3.json)
+├── WLASL_feature_processing_vitpose/     (data_parquet/, top_features/)
+├── AVASAG_feature_processing_mediapipe/  (data_parquet/, top_features/)
+└── AVASAG_feature_processing_vitpose/    (data_parquet/, top_features/, avasag_metadata.json)
+```
+
+You can upload via the Kaggle web UI ("Create → New Dataset") or `kaggle datasets create`. Zip the folders first to upload faster — Kaggle auto-extracts.
+
+**(b)** Make sure this branch is pushed to a Git remote Kaggle can clone over HTTPS (public GitHub works; for a private repo use a Kaggle Secret with a token).
+
+### 5.2 Per-experiment notebook
+
+In Kaggle: **New Notebook** → right sidebar:
+- Accelerator: **GPU T4 ×2** (or **GPU P100** if available)
+- Internet: **On**
+- Add data: attach your `sl-features` dataset
+
+Paste these four cells:
+
+```python
+# Cell 1 — clone the iberspeech26 branch into the writable working dir
+!git clone -b iberspeech26 https://github.com/georgebaher/SLR.git /kaggle/working/SLR
+%cd /kaggle/working/SLR
+```
+
+```python
+# Cell 2 — install missing deps. Kaggle already has torch (2.x), sklearn,
+# pandas, pyarrow, matplotlib, seaborn. Only python-dotenv and transformers
+# need to be added.
+!pip install -q python-dotenv transformers
+```
+
+```python
+# Cell 3 — point BASE_DIR at the attached dataset
+# (replace the slug after /kaggle/input/ with whatever you named yours)
+!sed -i 's|^BASE_DIR=.*|BASE_DIR=/kaggle/input/sl-features|' .env
+!grep '^BASE_DIR' .env
+```
+
+```python
+# Cell 4 — smoke test: load one configuration and print shapes / columns / sample
+# Prints split sizes, classes, feature columns, sample tensor shape, and a
+# DataLoader batch. Run this once after Cell 3 to confirm the data is mounted
+# and readable before launching a long training run.
+!python src/dataset/test_dataloader.py \
+    --dataset_name wlasl \
+    --feature_extraction_model mediapipe \
+    --features hand_landmarks pose_landmarks \
+    --n_glosses 10
+```
+
+```python
+# Cell 5 — run a training experiment
+!python src/run_training.py \
+    --experiment_name "WLASL_Encoder_Hand_Sincos" \
+    --dataset_name wlasl \
+    --feature_extraction_model mediapipe \
+    --model encoder \
+    --features hand_landmarks \
+    --hidden_dim 256 --n_heads 8 --n_layers 6 --pe sincos \
+    --epochs 100 --batch_size 32 --lr 1e-3 \
+    --optimizer adamw --scheduler warmup_cosine \
+    --save_checkpoints --plot_stats
+```
+
+Outputs land in `/kaggle/working/SLR/out-logs/`, `out-checkpoints/`, `out-img/` — Kaggle preserves `/kaggle/working/` as the notebook's downloadable output zip.
+
+### 5.3 Practical tips
+
+- **Interactive vs offline runs.** "Save & Run All (Commit)" reruns the whole notebook on a fresh container, with **up to 12 hours** of GPU per run. The interactive session is also capped at ~12 hours of idle, ~9 hours of GPU time. For sweeps, prefer Commit — you can queue several without babysitting.
+- **Persisting checkpoints between runs.** `/kaggle/working/` only lives as long as the notebook output. To carry a trained expert into a follow-up PET run, either (a) download `best_model.pth`, re-upload as its own dataset, attach, point `--hand_ckpt_path` at `/kaggle/input/...`, or (b) use the notebook's "Add Output to Dataset" feature to push artifacts into a versioned Kaggle Dataset.
+- **Reusing the same notebook for many configs.** Parametrise Cell 5 — define a small dict of args at the top, then loop or branch on it. Kaggle notebooks support widgets if you want a quick dropdown.
+- **Torch version.** Kaggle ships PyTorch 2.x + CUDA 12.x. Nothing in this codebase relies on torch 1.10 specifics, so no pin is needed — just don't run `pip install torch==1.10...` in Cell 2.
+- **`%cd` matters.** Every cell starts in `/kaggle/working/` by default. The `%cd /kaggle/working/SLR` in Cell 1 sticks across subsequent cells so the relative output paths (`out-logs/...`) work as expected.
+
+## 6. Previous Experiments
 
 Logs, checkpoints and plots for the prior experiments are archived at:
 https://drive.google.com/drive/folders/1RJlSvbJw0QXVB49blhyAC616sA-ItzYT?usp=sharing
