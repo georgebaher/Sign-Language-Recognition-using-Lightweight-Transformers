@@ -60,19 +60,25 @@ def main():
     if metadata_path is None:
         raise RuntimeError(f"Env var {dataset_key}_METADATA_PATH is not set. Check .env / BASE_DIR.")
 
+    # Map each feature name to its parquet path and the dataloader kwarg key
+    FEATURE_PATHS = {
+        "hand_landmarks":   ("hand_landmark_path",    os.path.join(base_path, "HAND_LANDMARKS.parquet")),
+        "pose_landmarks":   ("pose_landmark_path",    os.path.join(base_path, "POSE_LANDMARKS.parquet")),
+        "face_landmarks":   ("face_landmark_path",    os.path.join(base_path, "FACE_LANDMARKS.parquet")),
+        "hand_angles":      ("hand_angle_path",       os.path.join(base_path, "HAND_ANGLES.parquet")),
+        "pose_angles":      ("pose_angle_path",       os.path.join(base_path, "POSE_ANGLES.parquet")),
+        "face_blendshapes": ("face_blendshape_path",  os.path.join(base_path, "FACE_BLENDSHAPES.parquet")),
+    }
+
     common = {
         "metadata_json_path": metadata_path,
         "features": args.features,
         "n_glosses": args.n_glosses,
         "fs": args.fs,
         "feature_selection_dir": fs_dir if args.fs else None,
-        "pose_landmark_path": os.path.join(base_path, "POSE_LANDMARKS.parquet"),
-        "hand_landmark_path": os.path.join(base_path, "HAND_LANDMARKS.parquet"),
-        "face_landmark_path": os.path.join(base_path, "FACE_LANDMARKS.parquet"),
-        "pose_angle_path": os.path.join(base_path, "POSE_ANGLES.parquet"),
-        "hand_angle_path": os.path.join(base_path, "HAND_ANGLES.parquet"),
-        "face_blendshape_path": os.path.join(base_path, "FACE_BLENDSHAPES.parquet"),
     }
+    for feat, (kwarg, path) in FEATURE_PATHS.items():
+        common[kwarg] = path
 
     bar = "=" * 80
     print(bar)
@@ -81,6 +87,37 @@ def main():
     print(f"fs={bool(args.fs)} | n_glosses={args.n_glosses}")
     print(f"BASE    : {base_path}")
     print(bar)
+
+    # Resolve and print every path the dataset will actually read; aggregate any misses.
+    print("\nResolved paths:")
+    checks = [("metadata", metadata_path, True)]
+    if args.fs:
+        checks.append(("top_features_dir", fs_dir, True))
+    for feat in args.features:
+        if feat not in FEATURE_PATHS:
+            raise ValueError(f"Unknown feature '{feat}'. Valid: {list(FEATURE_PATHS)}")
+        _, path = FEATURE_PATHS[feat]
+        checks.append((feat, path, True))
+
+    missing = []
+    for label, path, required in checks:
+        if path is None:
+            status = "UNSET"
+        elif os.path.isdir(path) or os.path.isfile(path):
+            status = "OK"
+        else:
+            status = "MISS"
+        print(f"  [{status:5s}]  {label:18s}  {path}")
+        if required and status != "OK":
+            missing.append((label, path, status))
+
+    if missing:
+        print()
+        msg = ["One or more required paths are missing:"]
+        for label, path, status in missing:
+            msg.append(f"  - [{status}] {label}: {path}")
+        msg.append("Check the BASE_DIR in .env and the uploaded dataset layout.")
+        raise FileNotFoundError("\n".join(msg))
 
     sizes = {}
     train_set = None
