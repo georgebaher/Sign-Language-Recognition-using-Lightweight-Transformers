@@ -62,12 +62,12 @@ def main():
 
     # Map each feature name to its parquet path and the dataloader kwarg key
     FEATURE_PATHS = {
-        "hand_landmarks":   ("hand_landmark_path",    os.path.join(base_path, "HAND_LANDMARKS.parquet")),
-        "pose_landmarks":   ("pose_landmark_path",    os.path.join(base_path, "POSE_LANDMARKS.parquet")),
-        "face_landmarks":   ("face_landmark_path",    os.path.join(base_path, "FACE_LANDMARKS.parquet")),
-        "hand_angles":      ("hand_angle_path",       os.path.join(base_path, "HAND_ANGLES.parquet")),
-        "pose_angles":      ("pose_angle_path",       os.path.join(base_path, "POSE_ANGLES.parquet")),
-        "face_blendshapes": ("face_blendshape_path",  os.path.join(base_path, "FACE_BLENDSHAPES.parquet")),
+        "hand_landmarks":   ("hand_landmark_path",    os.path.join(base_path, "hand_landmarks.parquet")),
+        "pose_landmarks":   ("pose_landmark_path",    os.path.join(base_path, "pose_landmarks.parquet")),
+        "face_landmarks":   ("face_landmark_path",    os.path.join(base_path, "face_landmarks.parquet")),
+        "hand_angles":      ("hand_angle_path",       os.path.join(base_path, "hand_angles.parquet")),
+        "pose_angles":      ("pose_angle_path",       os.path.join(base_path, "pose_angles.parquet")),
+        "face_blendshapes": ("face_blendshape_path",  os.path.join(base_path, "face_blendshapes.parquet")),
     }
 
     common = {

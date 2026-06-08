@@ -178,12 +178,12 @@ def train(args):
         "metadata_json_path": os.getenv(f"{args.dataset_name.upper()}_METADATA_PATH"),
         "features": args.features, "n_glosses": args.n_glosses,
         "fs": args.fs, "feature_selection_dir": fs_dir if args.fs else None,
-        "pose_landmark_path": os.path.join(base_path, "POSE_LANDMARKS.parquet"),
-        "hand_landmark_path": os.path.join(base_path, "HAND_LANDMARKS.parquet"),
-        "face_landmark_path": os.path.join(base_path, "FACE_LANDMARKS.parquet"),
-        "pose_angle_path": os.path.join(base_path, "POSE_ANGLES.parquet"),
-        "hand_angle_path": os.path.join(base_path, "HAND_ANGLES.parquet"),
-        "face_blendshape_path": os.path.join(base_path, "FACE_BLENDSHAPES.parquet"),
+        "pose_landmark_path": os.path.join(base_path, "pose_landmarks.parquet"),
+        "hand_landmark_path": os.path.join(base_path, "hand_landmarks.parquet"),
+        "face_landmark_path": os.path.join(base_path, "face_landmarks.parquet"),
+        "pose_angle_path": os.path.join(base_path, "pose_angles.parquet"),
+        "hand_angle_path": os.path.join(base_path, "hand_angles.parquet"),
+        "face_blendshape_path": os.path.join(base_path, "face_blendshapes.parquet"),
     }
 
     logger.info(f"\n--- Building Model Architecture: {args.model} ---")
