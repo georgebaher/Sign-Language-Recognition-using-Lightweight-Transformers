@@ -105,6 +105,8 @@ def get_args_parser():
     parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--batch_size", type=int, default=32)
     parser.add_argument("--lr", type=float, default=1e-4)
+    parser.add_argument("--weight_decay", type=float, default=1e-4,
+                        help="L2 weight-decay for AdamW (decoupled). Was hardcoded to 1e-3; new default 1e-4 is gentler on the input-embedding layer.")
     parser.add_argument("--optimizer", type=str, default="adamw", choices=["sgd", "adam", "adamw"])
     parser.add_argument("--sgd_momentum", type=float, default=0.9)
     parser.add_argument("--scheduler", type=str, default="cosine",
@@ -313,7 +315,7 @@ def train(args):
 
     optimizer_map = {"sgd": optim.SGD(trainable_params, lr=args.lr, momentum=args.sgd_momentum),
                      "adam": optim.Adam(trainable_params, lr=args.lr),
-                     "adamw": optim.AdamW(trainable_params, lr=args.lr, weight_decay=1e-3)}
+                     "adamw": optim.AdamW(trainable_params, lr=args.lr, weight_decay=args.weight_decay)}
     optimizer = optimizer_map.get(args.optimizer.lower())
     if optimizer is None: raise ValueError(f"Invalid optimizer name: {args.optimizer}")
 
