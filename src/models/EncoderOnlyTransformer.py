@@ -21,7 +21,12 @@ class EncoderOnly(nn.Module):
 
         encoder_layer = nn.TransformerEncoderLayer(d_model=hidden_dim, nhead=n_heads,
                                                    dropout=dropout, batch_first=True)
-        self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
+        # enable_nested_tensor=False: the prototype nested-tensor fast path
+        # (triggered when src_key_padding_mask is passed) has known correctness
+        # issues on modern torch 2.x + CUDA — disable it to guarantee correct
+        # forward/backward.
+        self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=num_layers,
+                                             enable_nested_tensor=False)
         self.classifier = nn.Linear(hidden_dim, num_classes)
         print(f"[INFO] EncoderOnly initialized | input_dim={input_dim}, hidden_dim={hidden_dim}, n_heads={n_heads}, pe={pe}")
 

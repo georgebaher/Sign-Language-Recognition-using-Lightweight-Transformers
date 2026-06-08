@@ -22,7 +22,8 @@ class SPOTERTransformer(nn.Module):
 
         encoder_layer = nn.TransformerEncoderLayer(d_model=hidden_dim, nhead=n_heads, dropout=dropout, batch_first=True)
         decoder_layer = nn.TransformerDecoderLayer(d_model=hidden_dim, nhead=n_heads, dropout=dropout, batch_first=True)
-        self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
+        # See EncoderOnlyTransformer for why enable_nested_tensor=False.
+        self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=num_layers, enable_nested_tensor=False)
         self.decoder = nn.TransformerDecoder(decoder_layer, num_layers=num_layers)
         self.classifier = nn.Linear(hidden_dim, num_classes)
         print(f"[INFO] SPOTERTransformer initialized | input_dim={input_dim}, hidden_dim={hidden_dim}, n_heads={n_heads}, pe={pe}")

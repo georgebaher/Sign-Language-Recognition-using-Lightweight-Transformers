@@ -29,7 +29,7 @@ class LateFusionEncoder(nn.Module):
 
         def make_encoder():
             layer = nn.TransformerEncoderLayer(d_model=hidden_dim, nhead=n_heads, dropout=dropout, batch_first=True)
-            return nn.TransformerEncoder(layer, num_layers=num_layers)
+            return nn.TransformerEncoder(layer, num_layers=num_layers, enable_nested_tensor=False)
 
         self.hand_encoder = make_encoder()
         self.pose_encoder = make_encoder()
