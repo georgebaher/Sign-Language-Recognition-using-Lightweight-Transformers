@@ -1,6 +1,11 @@
 import torch
 
 
+# Per-dataloader memo: ids of loaders we've already reported fully-padded
+# samples for, so the warning fires once per loader instead of every val pass.
+_REPORTED_PADDED_LOADERS = set()
+
+
 def count_success(preds, labels, calc_stats=False):
     counter_success = 0
     stats = {i: [0, 0] for i in range(0, 100)}
@@ -74,52 +79,52 @@ def evaluate_batch(model, loss_fn, dataloader, device, return_preds=False):
     pred_correct, pred_all = 0, 0
     val_loss = 0.0
 
-    # --- Lists to store predictions and true labels ---
-    all_preds = []
-    all_labels = []
+    all_preds, all_labels = [], []
 
-    with torch.no_grad():  # Disable gradient calculations for efficiency
+    # Only scan for fully-padded samples on the first pass over this loader.
+    # On subsequent passes (e.g. once per epoch) we skip the check and stay quiet.
+    loader_id = id(dataloader)
+    report_padded = loader_id not in _REPORTED_PADDED_LOADERS
+    fully_padded_samples = [] if report_padded else None
+
+    with torch.no_grad():
         for i, data in enumerate(dataloader):
             batch, labels = data
 
-            # --- START DEBUGGING BLOCK ---
-            # Create the same pad mask that the model will see
-            # Here batch_data is the raw data from the loader, before it goes to the model
-            pad_mask = (batch == -2).all(dim=-1)  # Shape: [B, T]
-            # Check if any sequence in the batch is fully padded
-            is_fully_padded = pad_mask.all(dim=1)  # Shape: [B]
-            if is_fully_padded.any():
-                print(f"[WARNING] Found fully padded sequence(s) in validation batch {i} !")
-                # You can even find which sample in the batch it is
-                problem_indices = torch.where(is_fully_padded)[0]
-                print(f"[WARNING] ... Indices in batch: {problem_indices.tolist()}")
-            # --- END DEBUGGING BLOCK ---
+            if report_padded:
+                pad_mask = (batch == -2).all(dim=-1)  # [B, T]
+                is_fp = pad_mask.all(dim=1)           # [B]
+                if is_fp.any():
+                    for s in torch.where(is_fp)[0].tolist():
+                        fully_padded_samples.append((i, s))
 
             batch = batch.to(device)
             labels = labels.to(device, dtype=torch.long)
 
             outputs = model(batch)
             outs_squeeze = outputs.squeeze(1)
-            # print(outs_squeeze)
             loss = loss_fn(outs_squeeze, labels)
             val_loss += loss.item()
 
             preds = torch.argmax(outs_squeeze, dim=1)
-
-            # --- Append the batch results to our lists ---
             all_preds.extend(preds.cpu().numpy())
             all_labels.extend(labels.cpu().numpy())
 
             pred_correct += torch.sum(preds == labels).item()
             pred_all += labels.size(0)
 
+    if report_padded:
+        _REPORTED_PADDED_LOADERS.add(loader_id)
+        if fully_padded_samples:
+            print(f"[WARNING] {len(fully_padded_samples)} fully-padded sequence(s) in this dataloader "
+                  f"(silently zeroed by the model's safe-encoding path each pass):")
+            for bi, si in fully_padded_samples:
+                print(f"  - batch {bi}, sample {si}")
+
     average_val_loss = val_loss / len(dataloader)
     average_val_acc = pred_correct / pred_all
 
-    # --- Return the prediction lists if requested ---
     if return_preds:
         return average_val_loss, average_val_acc, (all_labels, all_preds)
-    else:
-        # The original return signature for the training loop
-        return average_val_loss, average_val_acc, None
+    return average_val_loss, average_val_acc, None
 
