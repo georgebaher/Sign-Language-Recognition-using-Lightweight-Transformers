@@ -1,19 +1,6 @@
 import torch
 
 
-def count_success(preds, labels, calc_stats=False):
-    counter_success = 0
-    stats = {i: [0, 0] for i in range(0, 100)}
-    for i_bs in range(preds.shape[0]):
-        if preds[i_bs] == labels[i_bs]:
-            counter_success += 1
-            if bool(calc_stats):
-                stats[int(labels[i_bs])][0] += 1  # correct predictions in class dim 0
-        if bool(calc_stats):
-            stats[int(labels[i_bs])][1] += 1  # total samples in class in dim 1
-    return counter_success, stats
-
-
 def train_epoch_batch(model, dataloader, loss_fn, optimizer, device, scheduler=None, clip_gradients=False, clip_weights=False):
     model.train()   # important for RNNs like LSTM for activating dropout layer
 
@@ -51,9 +38,9 @@ def train_epoch_batch(model, dataloader, loss_fn, optimizer, device, scheduler=N
         running_loss += loss.item()
 
         # Statistics
-        preds = torch.argmax(outs_squeeze, dim=1)  # [bs,1]
-        pred_correct += count_success(preds, labels)[0]
-        pred_all += preds.shape[0]  # it should be equal to batch size
+        preds = torch.argmax(outs_squeeze, dim=1)
+        pred_correct += torch.sum(preds == labels).item()
+        pred_all += labels.size(0)
 
     average_running_loss = running_loss / len(dataloader)
     average_running_acc = pred_correct / pred_all
