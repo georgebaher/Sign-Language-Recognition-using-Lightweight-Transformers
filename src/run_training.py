@@ -33,6 +33,7 @@ sys.path.insert(0, str(project_root))
 
 from src.dataset.SLFeaturesDataset import SignLanguageFeaturesDataset
 from src.utils import train_epoch_batch, evaluate_batch
+from src.ci_calculator import calculate_approximate_ci
 from src.models.BaselineTransformerClassification import BaselineTransformerClassification
 from src.models.SPOTER import SPOTERTransformer
 from src.models.LSTM import LSTMClassifier
@@ -260,11 +261,17 @@ def train(args):
         macro_f1 = f1_score(y_true, y_pred, average='macro', zero_division=0)
         weighted_f1 = f1_score(y_true, y_pred, average='weighted', zero_division=0)
 
+        # 95% CI margins (Agresti-Coull approximation, scaled back to [0, 1])
+        n_test = len(test_set)
+        acc_ci = calculate_approximate_ci(test_acc * 100, n_test) / 100
+        macro_f1_ci = calculate_approximate_ci(macro_f1 * 100, n_test) / 100
+        weighted_f1_ci = calculate_approximate_ci(weighted_f1 * 100, n_test) / 100
+
         logger.info("\n" + "=" * 30 + " EVALUATION SUMMARY " + "=" * 30)
         logger.info(f"Checkpoint: {os.path.basename(args.checkpoint_path)}")
-        logger.info(f"Test Accuracy: {test_acc:.4f}")
-        logger.info(f"Test Macro F1-Score: {macro_f1:.4f}")
-        logger.info(f"Test Weighted F1-Score: {weighted_f1:.4f}")
+        logger.info(f"Test Accuracy: {test_acc:.4f} ± {acc_ci:.4f} (95% CI, n={n_test})")
+        logger.info(f"Test Macro F1-Score: {macro_f1:.4f} ± {macro_f1_ci:.4f} (95% CI)")
+        logger.info(f"Test Weighted F1-Score: {weighted_f1:.4f} ± {weighted_f1_ci:.4f} (95% CI)")
         logger.info("=" * 82)
 
         logger.info("\n--- Generating Confusion Matrix ---")
@@ -362,13 +369,19 @@ def train(args):
     macro_f1 = f1_score(y_true, y_pred, average='macro', zero_division=0)
     weighted_f1 = f1_score(y_true, y_pred, average='weighted', zero_division=0)
 
+    # 95% CI margins (Agresti-Coull approximation, scaled back to [0, 1])
+    n_test = len(test_set)
+    acc_ci = calculate_approximate_ci(test_acc * 100, n_test) / 100
+    macro_f1_ci = calculate_approximate_ci(macro_f1 * 100, n_test) / 100
+    weighted_f1_ci = calculate_approximate_ci(weighted_f1 * 100, n_test) / 100
+
     end_time = time.time()
     total_time = end_time - start_time
     logger.info("\n" + "=" * 30 + " EXPERIMENT SUMMARY " + "=" * 30)
     logger.info(f"Experiment Name: {args.experiment_name}")
-    logger.info(f"Final Test Accuracy: {test_acc:.4f}")
-    logger.info(f"Final Macro F1 Score: {macro_f1:.4f}")
-    logger.info(f"Final Weighted F1 Score: {weighted_f1:.4f}")
+    logger.info(f"Final Test Accuracy: {test_acc:.4f} ± {acc_ci:.4f} (95% CI, n={n_test})")
+    logger.info(f"Final Macro F1 Score: {macro_f1:.4f} ± {macro_f1_ci:.4f} (95% CI)")
+    logger.info(f"Final Weighted F1 Score: {weighted_f1:.4f} ± {weighted_f1_ci:.4f} (95% CI)")
     logger.info(f"Best Validation Accuracy: {best_val_acc:.4f}")
     logger.info(f"Total Trainable Parameters: {total_params:,}")
     logger.info(f"Total Runtime: {total_time:.2f} seconds ({total_time / 60:.2f} minutes)")
