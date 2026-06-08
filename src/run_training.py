@@ -156,7 +156,7 @@ def plot_confusion_matrix(y_true, y_pred, class_names, output_path):
     plt.tight_layout()
 
     fig.savefig(output_path, dpi=300)
-    print(f"Confusion matrix plot saved to: {output_path}")
+    logging.info(f"Confusion matrix saved to: {output_path}")
 
 
 def train(args):
@@ -166,11 +166,25 @@ def train(args):
 
     logger = setup_logging(f"out-logs/{args.feature_extraction_model.lower()}", args.experiment_name)
 
-    logger.info("--- Starting Experiment ---")
-    logger.info(f"Experiment Name: {args.experiment_name}")
-    logger.info(f"Using device: {device}")
+    logger.info(f"--- Experiment: {args.experiment_name} | device={device} ---")
     logger.info("Arguments:")
-    for key, value in sorted(vars(args).items()): logger.info(f"  > {key}: {value}")
+    logger.info(f"  > data     : dataset={args.dataset_name} backend={args.feature_extraction_model} "
+                f"n_glosses={args.n_glosses} features={args.features} fs={args.fs} seed={args.seed}")
+    logger.info(f"  > model    : {args.model} | hidden_dim={args.hidden_dim} n_heads={args.n_heads} "
+                f"n_layers={args.n_layers} pe={args.pe}")
+    logger.info(f"  > optim    : optimizer={args.optimizer} lr={args.lr} weight_decay={args.weight_decay} "
+                f"sgd_momentum={args.sgd_momentum} scheduler={args.scheduler} clip_gradients={args.clip_gradients}")
+    logger.info(f"  > training : epochs={args.epochs} batch_size={args.batch_size} "
+                f"save_checkpoints={args.save_checkpoints} log_freq={args.log_freq} plot_stats={args.plot_stats}")
+    if args.model in ("latefusion_encoder", "latefusion_pet"):
+        logger.info(f"  > fusion   : hand_input_dim={args.hand_input_dim} pose_input_dim={args.pose_input_dim} "
+                    f"face_input_dim={args.face_input_dim} debug={args.debug}")
+    if args.model == "latefusion_pet":
+        logger.info(f"  > experts  : hand_ckpt={args.hand_ckpt_path} pose_ckpt={args.pose_ckpt_path} "
+                    f"face_ckpt={args.face_ckpt_path}")
+    if args.evaluate_only:
+        logger.info(f"  > eval     : evaluate_only={args.evaluate_only} checkpoint_path={args.checkpoint_path} "
+                    f"output_dir={args.output_dir}")
 
     load_dotenv()
     base_path = os.getenv(f"{args.dataset_name.upper()}_{args.feature_extraction_model.upper()}_BASE_PATH")
@@ -188,7 +202,7 @@ def train(args):
         "face_blendshape_path": os.path.join(base_path, "face_blendshapes.parquet"),
     }
 
-    logger.info(f"\n--- Building Model Architecture: {args.model} ---")
+    logger.info(f"--- Building model: {args.model} ---")
 
     # We build a temporary dataset just to infer dimensions (silent — the real
     # train/val/test loads below will print their own summaries).
@@ -250,14 +264,12 @@ def train(args):
         if not args.checkpoint_path or not os.path.exists(args.checkpoint_path):
             raise ValueError("--evaluate_only mode requires a valid --checkpoint_path.")
 
-        logger.info(f"\n--- Loading checkpoint for evaluation: {args.checkpoint_path} ---")
+        logger.info(f"--- Evaluation-only | checkpoint: {args.checkpoint_path} ---")
         model.load_state_dict(torch.load(args.checkpoint_path, map_location=device))
 
-        logger.info("\n--- Loading Test Dataset ---")
         test_set = SignLanguageFeaturesDataset(**dataloader_args, split="test")
         test_loader = DataLoader(test_set, shuffle=False, batch_size=args.batch_size)
 
-        logger.info("\n--- Running Evaluation on Test Set ---")
         loss_fn = nn.CrossEntropyLoss()
         _, test_acc, (y_true, y_pred) = evaluate_batch(model, loss_fn, test_loader, device, return_preds=True)
 
@@ -277,25 +289,21 @@ def train(args):
         logger.info(f"Test Weighted F1-Score: {weighted_f1:.4f} ± {weighted_f1_ci:.4f} (95% CI)")
         logger.info("=" * 82)
 
-        logger.info("\n--- Generating Confusion Matrix ---")
         os.makedirs(args.output_dir, exist_ok=True)
         class_names = [test_set.idx2gloss[i] for i in range(len(test_set.idx2gloss))]
         plot_filename = f"{args.experiment_name}_confusion_matrix.png"
         plot_path = os.path.join(args.output_dir, plot_filename)
         plot_confusion_matrix(y_true, y_pred, class_names, plot_path)
-
-        logger.info("--- Evaluation complete ---")
         return  # Exit the function cleanly
 
     # --- If not evaluate_only, proceed with the full training pipeline ---
-    logger.info("\n--- Loading Datasets ---")
-    train_set = SignLanguageFeaturesDataset(**dataloader_args, split="train")
-    val_set = SignLanguageFeaturesDataset(**dataloader_args, split="val")
+    logger.info("--- Loading datasets ---")
+    train_set = SignLanguageFeaturesDataset(**dataloader_args, split="train", verbose=False)
+    val_set = SignLanguageFeaturesDataset(**dataloader_args, split="val", verbose=False)
     test_set = SignLanguageFeaturesDataset(**dataloader_args, split="test")
 
-    logger.info(f"Dataset Sizes: Train={len(train_set)}, Val={len(val_set)}, Test={len(test_set)}")
-    logger.info(f"Number of Classes: {len(train_set.gloss2idx)}")
-    logger.info(f"Feature Dimension: {train_set.feature_dim} | Max Sequence Length: {train_set.max_len}")
+    logger.info(f"Datasets ready | Train={len(train_set)} Val={len(val_set)} Test={len(test_set)} | "
+                f"classes={len(train_set.gloss2idx)} feat_dim={train_set.feature_dim} max_len={train_set.max_len}")
 
     train_loader = DataLoader(train_set, shuffle=True, batch_size=args.batch_size)
     val_loader = DataLoader(val_set, shuffle=False, batch_size=args.batch_size)
@@ -304,14 +312,12 @@ def train(args):
     input_dim, hidden_dim, num_classes = train_set.feature_dim, train_set.feature_dim, len(train_set.gloss2idx)
 
     total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    logger.info(f"Total Trainable Parameters: {total_params:,}")
-    if device.type == 'cuda': logger.info(
-        f"Initial GPU Memory used: {torch.cuda.memory_allocated() / 1024 ** 2:.2f} MB")
+    gpu_mem = f" | GPU mem: {torch.cuda.memory_allocated() / 1024 ** 2:.0f} MB" if device.type == 'cuda' else ""
+    logger.info(f"Trainable params: {total_params:,}{gpu_mem}")
 
     loss_fn = nn.CrossEntropyLoss()
 
     trainable_params = list(filter(lambda p: p.requires_grad, model.parameters()))
-    # print(trainable_params)
 
     optimizer_map = {"sgd": optim.SGD(trainable_params, lr=args.lr, momentum=args.sgd_momentum),
                      "adam": optim.Adam(trainable_params, lr=args.lr),
@@ -335,7 +341,7 @@ def train(args):
     checkpoint_dir = Path("out-checkpoints") / f"{args.feature_extraction_model.lower()}" / args.experiment_name
     if args.save_checkpoints: checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
-    logger.info(f"\n\n--- Starting Training for {args.epochs} epochs ---")
+    logger.info(f"--- Training for {args.epochs} epochs ---")
     for epoch in range(args.epochs):
         avg_train_loss, avg_train_acc = train_epoch_batch(model, train_loader, loss_fn, optimizer, device, scheduler,
                                                           args.clip_gradients)
@@ -353,7 +359,7 @@ def train(args):
             best_val_acc = avg_val_acc
             best_model_path = checkpoint_dir / "best_model.pth"
             torch.save(model.state_dict(), best_model_path)
-            logger.info(f"  -> [Checkpoint] Saved new best model (Val Acc: {best_val_acc:.4f})")
+            logger.info(f"  -> Saved new best model (Val Acc: {best_val_acc:.4f})")
 
         lr_progress.append(optimizer.param_groups[0]['lr'])
 
@@ -362,7 +368,7 @@ def train(args):
         torch.save(model.state_dict(), final_model_path)
         logger.info(f"--- Saved final model to {final_model_path} ---")
 
-    logger.info("\n--- Starting Final Evaluation on Test Set ---")
+    logger.info("--- Final evaluation on test set ---")
     best_model_path = checkpoint_dir / "best_model.pth"
     if args.save_checkpoints and best_model_path.exists():
         logger.info(f"Loading best model from {best_model_path}")

@@ -53,13 +53,6 @@ def train_epoch_batch(model, dataloader, loss_fn, optimizer, device, scheduler=N
         if scheduler:
             scheduler.step()
 
-
-
-        # # Visualize gradients
-        # for name, param in model.named_parameters():
-        #     if param.grad is not None:
-        #         print(name, param.grad.norm())
-
         running_loss += loss.item()
 
         # Statistics

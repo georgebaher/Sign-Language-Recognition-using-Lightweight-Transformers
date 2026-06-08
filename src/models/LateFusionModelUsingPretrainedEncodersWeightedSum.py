@@ -17,7 +17,6 @@ class LateFusionPET(nn.Module):
                  hand_input_dim: int, pose_input_dim: int, face_input_dim: int,
                  num_classes: int, debug: bool = False):
         super().__init__()
-        print("[INFO] Initializing LateFusionPET with Weighted Logit Sum...")
 
         self.hand_expert = hand_expert
         self.pose_expert = pose_expert
@@ -30,14 +29,9 @@ class LateFusionPET(nn.Module):
         self.debug = debug
 
         if self.debug:
-            print("\n" + "=" * 20 + " Initializing LateFusionPET (Weighted Sum) " + "=" * 20)
-            print(f"  - Fusion Strategy: Learned Weighted Sum of Logits")
-            print(f"  - Hand Stream: Input {self.hand_input_dim}")
-            print(f"  - Pose Stream: Input {self.pose_input_dim}")
-            print(f"  - Face Stream: Input {self.face_input_dim}")
-            print("=" * 70 + "\n")
+            print(f"[DEBUG] LateFusionPET (Weighted Sum) | inputs hand={self.hand_input_dim} "
+                  f"pose={self.pose_input_dim} face={self.face_input_dim}")
 
-        print("[INFO] Freezing parameters of the expert models.")
         for expert in [self.hand_expert, self.pose_expert, self.face_expert]:
             for param in expert.parameters():
                 param.requires_grad = False

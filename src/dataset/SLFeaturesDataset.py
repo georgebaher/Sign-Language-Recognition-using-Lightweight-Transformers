@@ -71,14 +71,6 @@ class SignLanguageFeaturesDataset(Dataset):
             "hand_landmarks": hand_landmark_path, "pose_angles": pose_angle_path,
             "hand_angles": hand_angle_path, "face_blendshapes": face_blendshape_path
         }
-        # print("[INFO] Received features Parquet files paths:")
-        # print(f" ...   Received hand landmarks path from ({hand_landmark_path}).")
-        # print(f" ...   Received hand angles path from ({hand_angle_path}).")
-        # print(f" ...   Received pose landmarks path from ({pose_landmark_path}).")
-        # print(f" ...   Received pose angles path from ({pose_angle_path}).")
-        # print(f" ...   Received face landmarks path from ({face_landmark_path}).")
-        # print(f" ...   Received face blendshapes path from ({face_blendshape_path}).")
-
         valid_features = list(feature_paths.keys())
         dfs_to_merge = {}
         id_cols_to_drop = ['frame', 'person_id']
