@@ -110,7 +110,7 @@ def get_args_parser():
     parser.add_argument("--optimizer", type=str, default="adamw", choices=["sgd", "adam", "adamw"])
     parser.add_argument("--sgd_momentum", type=float, default=0.9)
     parser.add_argument("--scheduler", type=str, default="cosine",
-                        choices=["warmup_linear", "warmup_cosine", "warmup_constant", "none"])
+                        choices=["cosine", "linear", "constant", "none"])
     parser.add_argument("--clip_gradients", type=float, default=0.0)
     parser.add_argument("--save_checkpoints", action='store_true')
     parser.add_argument("--log_freq", type=int, default=1)
@@ -334,6 +334,7 @@ def train(args):
                                                                    num_training_steps=total_steps),
                          "constant": get_constant_schedule_with_warmup(optimizer, num_warmup_steps=warmup_steps)}
         scheduler = scheduler_map.get(args.scheduler.lower())
+        if scheduler is None: raise ValueError(f"Invalid scheduler name: {args.scheduler}")
 
     train_losses, train_accs, val_losses, val_accs, lr_progress = [], [], [], [], []
     best_val_acc = 0.0
