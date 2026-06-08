@@ -31,10 +31,10 @@ class SignLanguageFeaturesDataset(Dataset):
                  split: str = "train",
                  n_glosses: int = None,
                  fs: int = 0,
-                 max_len: int = None):
+                 max_len: int = None,
+                 verbose: bool = True):
 
         start_time = time.time()
-        print(f"\n--- Initializing Dataset for split: '{split}' | Features: {features} ---")
 
         # 1. Argument validation and setup
         self.split = split
@@ -65,8 +65,6 @@ class SignLanguageFeaturesDataset(Dataset):
         for entry in self.instances:
             entry["gloss_idx"] = self.gloss2idx[entry["gloss"]]
         video_ids_in_split = {entry["video_id"] for entry in self.instances}
-        print(f"Loaded metadata for {len(self.instances)} instances from {len(glosses)} glosses.")
-
         # 3. Load and merge the required Parquet files
         feature_paths = {
             "pose_landmarks": pose_landmark_path, "face_landmarks": face_landmark_path,
@@ -168,8 +166,13 @@ class SignLanguageFeaturesDataset(Dataset):
         if self.max_len is None: self.max_len = self.video_lengths.max()
 
         end_time = time.time()
-        print(
-            f"--- Dataset initialized in {end_time - start_time:.2f}s | Instances: {len(self.instances)} | Feat Dim: {self.embedding_dim} | Max Len: {self.max_len} ---")
+        if verbose:
+            n_glosses = len(set(e["gloss"] for e in self.instances))
+            print(
+                f"[Dataset] split={self.split:5s} | features={self.features} | "
+                f"instances={len(self.instances)} glosses={n_glosses} "
+                f"feat_dim={self.embedding_dim} max_len={self.max_len} | {end_time - start_time:.2f}s"
+            )
 
     def __len__(self):
         return len(self.instances)

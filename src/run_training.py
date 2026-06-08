@@ -188,8 +188,9 @@ def train(args):
 
     logger.info(f"\n--- Building Model Architecture: {args.model} ---")
 
-    # We build a temporary dataset just to infer dimensions
-    temp_dataset = SignLanguageFeaturesDataset(**dataloader_args, split='val')
+    # We build a temporary dataset just to infer dimensions (silent — the real
+    # train/val/test loads below will print their own summaries).
+    temp_dataset = SignLanguageFeaturesDataset(**dataloader_args, split='val', verbose=False)
     input_dim, num_classes = temp_dataset.feature_dim, len(temp_dataset.gloss2idx)
     del temp_dataset  # Free up memory
 
@@ -332,7 +333,7 @@ def train(args):
     checkpoint_dir = Path("out-checkpoints") / f"{args.feature_extraction_model.lower()}" / args.experiment_name
     if args.save_checkpoints: checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
-    logger.info(f"\n--- Starting Training for {args.epochs} epochs ---")
+    logger.info(f"\n\n--- Starting Training for {args.epochs} epochs ---")
     for epoch in range(args.epochs):
         avg_train_loss, avg_train_acc = train_epoch_batch(model, train_loader, loss_fn, optimizer, device, scheduler,
                                                           args.clip_gradients)
