@@ -41,13 +41,6 @@ class LateFusionEncoder(nn.Module):
 
         self.fusion_weights = nn.Parameter(torch.ones(3))
 
-        if self.debug:
-            print("\n" + "=" * 20 + " Initializing LateFusionEncoder (Weighted Sum) " + "=" * 20)
-            print(f"  - Hand Stream: Input {self.hand_dim} -> hidden_dim {hidden_dim}")
-            print(f"  - Pose Stream: Input {self.pose_dim} -> hidden_dim {hidden_dim}")
-            print(f"  - Face Stream: Input {self.face_dim} -> hidden_dim {hidden_dim}")
-            print("=" * 70 + "\n")
-
     def _process_stream(self, x: torch.Tensor, embedding: nn.Linear, encoder: nn.TransformerEncoder,
                         classifier: nn.Linear) -> torch.Tensor:
         # x: [B, T, modality_input_dim]
@@ -74,9 +67,6 @@ class LateFusionEncoder(nn.Module):
         return classifier(pooled)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        if self.debug:
-            print(f"\n[DEBUG] LateFusionEncoder (Weighted Sum) input shape: {x.shape}")
-
         start_pose = self.hand_dim
         start_face = self.hand_dim + self.pose_dim
         end_face = start_face + self.face_dim
@@ -90,9 +80,6 @@ class LateFusionEncoder(nn.Module):
         face_logits = self._process_stream(x_face, self.face_embedding, self.face_encoder, self.face_classifier)
 
         normalized_weights = F.softmax(self.fusion_weights, dim=0)
-        if self.debug:
-            w = normalized_weights.detach().cpu().numpy()
-            print(f"[DEBUG] Fusion weights (softmax) -> Hand: {w[0]:.4f}, Pose: {w[1]:.4f}, Face: {w[2]:.4f}")
 
         stacked = torch.stack([hand_logits, pose_logits, face_logits])
         fused = (stacked * normalized_weights.view(3, 1, 1)).sum(dim=0)

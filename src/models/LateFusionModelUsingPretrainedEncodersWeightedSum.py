@@ -28,10 +28,6 @@ class LateFusionPET(nn.Module):
 
         self.debug = debug
 
-        if self.debug:
-            print(f"[DEBUG] LateFusionPET (Weighted Sum) | inputs hand={self.hand_input_dim} "
-                  f"pose={self.pose_input_dim} face={self.face_input_dim}")
-
         for expert in [self.hand_expert, self.pose_expert, self.face_expert]:
             for param in expert.parameters():
                 param.requires_grad = False
@@ -40,9 +36,6 @@ class LateFusionPET(nn.Module):
         self.fusion_weights = nn.Parameter(torch.ones(3))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        if self.debug:
-            print(f"\n[DEBUG] LateFusionPET (Weighted Sum) input shape: {x.shape}")
-
         start_pose = self.hand_input_dim
         start_face = self.hand_input_dim + self.pose_input_dim
         end_face = start_face + self.face_input_dim
@@ -57,9 +50,6 @@ class LateFusionPET(nn.Module):
             face_logits = self.face_expert(x_face)
 
         normalized_weights = F.softmax(self.fusion_weights, dim=0)
-        if self.debug:
-            w = normalized_weights.detach().cpu().numpy()
-            print(f"[DEBUG] Fusion weights (softmax) -> Hand: {w[0]:.4f}, Pose: {w[1]:.4f}, Face: {w[2]:.4f}")
 
         stacked = torch.stack([hand_logits, pose_logits, face_logits])
         fused = (stacked * normalized_weights.view(3, 1, 1)).sum(dim=0)

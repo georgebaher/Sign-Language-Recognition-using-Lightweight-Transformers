@@ -16,7 +16,6 @@ class LateFusionPET(nn.Module):
                  hand_input_dim: int, pose_input_dim: int, face_input_dim: int,
                  num_classes: int, debug: bool = False):
         super().__init__()
-        print("[INFO] Initializing LateFusionPET with internal slicing...")
 
         self.hand_expert = hand_expert
         self.pose_expert = pose_expert
@@ -28,26 +27,14 @@ class LateFusionPET(nn.Module):
 
         self.debug = debug
 
-        if self.debug:
-            print("\n" + "=" * 20 + " Initializing LateFusionPET (Concat) " + "=" * 20)
-            print(f"  - Hand Stream: Input {self.hand_input_dim}")
-            print(f"  - Pose Stream: Input {self.pose_input_dim}")
-            print(f"  - Face Stream: Input {self.face_input_dim}")
-            print("=" * 70 + "\n")
-
-        print("[INFO] Freezing parameters of the expert models.")
         for expert in [self.hand_expert, self.pose_expert, self.face_expert]:
             for param in expert.parameters():
                 param.requires_grad = False
             expert.eval()
 
         self.fusion_classifier = nn.Linear(num_classes * 3, num_classes)
-        print(f"[INFO] Trainable fusion layer created: Linear({num_classes * 3}, {num_classes})")
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        if self.debug:
-            print(f"\n[DEBUG] LateFusionPET (Concat) input shape: {x.shape}")
-
         start_pose = self.hand_input_dim
         start_face = self.hand_input_dim + self.pose_input_dim
         end_face = start_face + self.face_input_dim

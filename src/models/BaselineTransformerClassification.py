@@ -21,7 +21,6 @@ class BaselineTransformerClassification(nn.Module):
         self.transformer = nn.Transformer(hidden_dim, n_heads, num_layers, num_layers,
                                           dropout=dropout, batch_first=True)
         self.classifier = nn.Linear(hidden_dim, num_classes)
-        print(f"[INFO] BaselineTransformerClassification initialized | input_dim={input_dim}, hidden_dim={hidden_dim}, n_heads={n_heads}, pe={pe}")
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # x: [B, T, input_dim]

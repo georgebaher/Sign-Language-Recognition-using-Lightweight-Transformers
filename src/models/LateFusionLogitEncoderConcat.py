@@ -40,14 +40,6 @@ class LateFusionEncoder(nn.Module):
 
         self.fusion_classifier = nn.Linear(num_classes * 3, num_classes)
 
-        if self.debug:
-            print("\n" + "=" * 20 + " Initializing LateFusionEncoder (Logit Concat) " + "=" * 20)
-            print(f"  - Hand Stream: Input {self.hand_dim} -> hidden_dim {hidden_dim}")
-            print(f"  - Pose Stream: Input {self.pose_dim} -> hidden_dim {hidden_dim}")
-            print(f"  - Face Stream: Input {self.face_dim} -> hidden_dim {hidden_dim}")
-            print(f"  - Fusion: Linear({num_classes * 3}, {num_classes})")
-            print("=" * 70 + "\n")
-
     def _process_stream(self, x: torch.Tensor, embedding: nn.Linear, encoder: nn.TransformerEncoder,
                         classifier: nn.Linear) -> torch.Tensor:
         # x: [B, T, modality_input_dim]
@@ -74,9 +66,6 @@ class LateFusionEncoder(nn.Module):
         return classifier(pooled)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        if self.debug:
-            print(f"\n[DEBUG] LateFusionEncoder (Concat) input shape: {x.shape}")
-
         start_pose = self.hand_dim
         start_face = self.hand_dim + self.pose_dim
         end_face = start_face + self.face_dim

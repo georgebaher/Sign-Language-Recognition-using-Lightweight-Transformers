@@ -28,7 +28,6 @@ class EncoderOnly(nn.Module):
         self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=num_layers,
                                              enable_nested_tensor=False)
         self.classifier = nn.Linear(hidden_dim, num_classes)
-        print(f"[INFO] EncoderOnly initialized | input_dim={input_dim}, hidden_dim={hidden_dim}, n_heads={n_heads}, pe={pe}")
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # x: [B, T, input_dim]

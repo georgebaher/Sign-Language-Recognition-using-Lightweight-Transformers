@@ -9,7 +9,6 @@ class LSTMClassifier(nn.Module):
         self.lstm = nn.LSTM(input_dim, hidden_dim, num_layers=num_layers,
                             batch_first=True, bidirectional=False, dropout=dropout)
         self.classifier = nn.Linear(hidden_dim, num_classes)
-        print(f"[INFO] LSTM initialized | layers={num_layers}, hidden_dim={hidden_dim}")
 
     def forward(self, x):
         # x: [B, T, D]

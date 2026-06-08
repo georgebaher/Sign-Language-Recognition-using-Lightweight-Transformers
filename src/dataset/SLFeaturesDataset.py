@@ -6,7 +6,6 @@
 
 import os
 import sys
-import time
 import json
 import pandas as pd
 import numpy as np
@@ -33,8 +32,6 @@ class SignLanguageFeaturesDataset(Dataset):
                  fs: int = 0,
                  max_len: int = None,
                  verbose: bool = True):
-
-        start_time = time.time()
 
         # 1. Argument validation and setup
         self.split = split
@@ -107,7 +104,6 @@ class SignLanguageFeaturesDataset(Dataset):
 
         cols_to_keep = initial_cols
         if self.fs == 1:
-            print(f"Applying feature selection from: {feature_selection_dir}")
             ranked_features = {}
             sys.path.insert(0, feature_selection_dir)
             modules_to_delete = []
@@ -157,15 +153,6 @@ class SignLanguageFeaturesDataset(Dataset):
         self.video_lengths = self.features_map.size()
         if self.max_len is None: self.max_len = self.video_lengths.max()
 
-        end_time = time.time()
-        if verbose:
-            n_glosses = len(set(e["gloss"] for e in self.instances))
-            print(
-                f"[Dataset] split={self.split:5s} | features={self.features} | "
-                f"instances={len(self.instances)} glosses={n_glosses} "
-                f"feat_dim={self.embedding_dim} max_len={self.max_len} | {end_time - start_time:.2f}s"
-            )
-
     def __len__(self):
         return len(self.instances)
 
@@ -175,7 +162,6 @@ class SignLanguageFeaturesDataset(Dataset):
         try:
             group = self.features_map.get_group(video_id)
         except KeyError:
-            print(f"Error: video_id '{video_id}' not in Parquet data.")
             return torch.full((self.max_len, self.embedding_dim), -2.0), torch.tensor(-1, dtype=torch.long)
 
         features = group[self.final_columns].values.astype(np.float32)

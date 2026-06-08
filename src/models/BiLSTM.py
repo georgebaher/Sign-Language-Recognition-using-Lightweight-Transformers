@@ -41,8 +41,6 @@ class BiLSTMClassifier(nn.Module):
         #    dimension must be `hidden_dim * 2`.
         self.classifier = nn.Linear(hidden_dim * 2, num_classes)
 
-        print(f"[INFO] BiLSTM initialized | layers={num_layers}, hidden_dim={hidden_dim} (per direction)")
-
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         Forward pass of the Bi-LSTM classifier.
