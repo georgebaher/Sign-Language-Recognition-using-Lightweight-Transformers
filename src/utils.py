@@ -14,21 +14,15 @@ def train_epoch_batch(model, dataloader, loss_fn, optimizer, device, scheduler=N
         labels = labels.to(device, dtype=torch.long)
 
         optimizer.zero_grad()
-        outputs = model(batch)
-        outs_squeeze = outputs.squeeze(1)  # remove the temporal dimension
+        outputs = model(batch)  # [B, num_classes]
 
-        loss = loss_fn(outs_squeeze, labels)  # loss = criterion(outputs[0], labels[0])
+        loss = loss_fn(outputs, labels)
         loss.backward()
 
-        # Clip gradients to prevent them from exploding.
+        # Clip gradients to prevent them from exploding. clip_gradients is the
+        # max-norm threshold (0/False disables clipping).
         if clip_gradients:
-            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-
-        # # Weight clipping
-        # if clip_weights:
-        #     with torch.no_grad():
-        #         for param in model.parameters():
-        #             param.clamp_(-0.5, 0.5)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=clip_gradients)
 
         # Step optimizer and scheduler
         optimizer.step()
@@ -38,7 +32,7 @@ def train_epoch_batch(model, dataloader, loss_fn, optimizer, device, scheduler=N
         running_loss += loss.item()
 
         # Statistics
-        preds = torch.argmax(outs_squeeze, dim=1)
+        preds = torch.argmax(outputs, dim=1)
         pred_correct += torch.sum(preds == labels).item()
         pred_all += labels.size(0)
 
@@ -63,12 +57,11 @@ def evaluate_batch(model, loss_fn, dataloader, device, return_preds=False):
             batch = batch.to(device)
             labels = labels.to(device, dtype=torch.long)
 
-            outputs = model(batch)
-            outs_squeeze = outputs.squeeze(1)
-            loss = loss_fn(outs_squeeze, labels)
+            outputs = model(batch)  # [B, num_classes]
+            loss = loss_fn(outputs, labels)
             val_loss += loss.item()
 
-            preds = torch.argmax(outs_squeeze, dim=1)
+            preds = torch.argmax(outputs, dim=1)
             all_preds.extend(preds.cpu().numpy())
             all_labels.extend(labels.cpu().numpy())
 

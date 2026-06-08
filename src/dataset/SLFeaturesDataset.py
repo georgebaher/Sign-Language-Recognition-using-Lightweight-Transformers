@@ -7,6 +7,7 @@
 import os
 import sys
 import json
+import logging
 import pandas as pd
 import numpy as np
 import torch
@@ -56,7 +57,10 @@ class SignLanguageFeaturesDataset(Dataset):
             for entry in metadata_raw for inst in entry["instances"]
             if inst["split"] == self.split
         ]
-        glosses = sorted(set(entry["gloss"] for entry in self.instances))
+        # Build the gloss vocabulary from the full selected metadata (not just this
+        # split) so the gloss->index mapping is identical across train/val/test and
+        # num_classes always covers every selected gloss.
+        glosses = sorted({entry["gloss"] for entry in metadata_raw})
         self.gloss2idx = {gloss: idx for idx, gloss in enumerate(glosses)}
         self.idx2gloss = {idx: gloss for gloss, idx in self.gloss2idx.items()}
         for entry in self.instances:
@@ -87,7 +91,7 @@ class SignLanguageFeaturesDataset(Dataset):
             dfs_to_merge[feature_name] = df
 
         if not dfs_to_merge:
-            raise ValueError(f"No valid data files could be loaded for feature type: '{self.features_type}'")
+            raise ValueError(f"No valid data files could be loaded for features: {self.features}")
 
         dfs_to_merge_sorted = [
             dfs_to_merge[name] for name in self.CANONICAL_MODALITY_ORDER if name in dfs_to_merge
@@ -153,6 +157,20 @@ class SignLanguageFeaturesDataset(Dataset):
         self.video_lengths = self.features_map.size()
         if self.max_len is None: self.max_len = self.video_lengths.max()
 
+        # 7. Drop instances whose video has no feature rows (missing from the parquet
+        # files). Otherwise __getitem__ yields a -1 sentinel label that
+        # CrossEntropyLoss treats as an out-of-range target and that pollutes the
+        # accuracy / F1 / confidence-interval counts.
+        present_ids = set(self.video_lengths.index.astype(str))
+        usable = [entry for entry in self.instances if entry["video_id"] in present_ids]
+        dropped = len(self.instances) - len(usable)
+        # Always warn (ignores `verbose`): silently training/evaluating on fewer
+        # samples than the metadata lists is the kind of thing you want shouted.
+        if dropped:
+            logging.warning(f"[{self.split}] Dropped {dropped} instance(s) with no feature data "
+                            f"(video_id missing from parquet); {len(usable)} remain.")
+        self.instances = usable
+
     def __len__(self):
         return len(self.instances)
 
@@ -162,6 +180,9 @@ class SignLanguageFeaturesDataset(Dataset):
         try:
             group = self.features_map.get_group(video_id)
         except KeyError:
+            # Unreachable in normal use: instances with no feature rows are dropped
+            # in __init__ (step 7). Kept as a defensive fallback — the -1 label is a
+            # sentinel that must not be fed to CrossEntropyLoss (out-of-range target).
             return torch.full((self.max_len, self.embedding_dim), -2.0), torch.tensor(-1, dtype=torch.long)
 
         features = group[self.final_columns].values.astype(np.float32)

@@ -22,7 +22,7 @@ from transformers import (
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from dotenv import load_dotenv
-from sklearn.metrics import f1_score, confusion_matrix, accuracy_score
+from sklearn.metrics import f1_score, confusion_matrix
 import seaborn as sns
 
 
@@ -142,7 +142,7 @@ def fix_randomisation(seed):
 
 def plot_confusion_matrix(y_true, y_pred, class_names, output_path):
     """Generates and saves a confusion matrix plot."""
-    cm = confusion_matrix(y_true, y_pred, normalize='true')
+    cm = confusion_matrix(y_true, y_pred, labels=list(range(len(class_names))), normalize='true')
 
     fig, ax = plt.subplots(figsize=(40, 40))  # Large figure size for many classes
     sns.heatmap(cm, annot=False, fmt=".2f", cmap='Blues', ax=ax,
@@ -202,13 +202,26 @@ def train(args):
         "face_blendshape_path": os.path.join(base_path, "face_blendshapes.parquet"),
     }
 
+    # Load the dataset(s) for this run up front; model dimensions come straight
+    # from the data (feature_dim and the gloss vocabulary are split-independent).
+    logger.info("--- Loading datasets ---")
+    if args.evaluate_only:
+        test_set = SignLanguageFeaturesDataset(**dataloader_args, split="test")
+        train_set = val_set = None
+        dim_source = test_set
+        logger.info(f"Datasets ready | Test={len(test_set)} | classes={len(test_set.gloss2idx)} "
+                    f"feat_dim={test_set.feature_dim} max_len={test_set.max_len}")
+    else:
+        train_set = SignLanguageFeaturesDataset(**dataloader_args, split="train", verbose=False)
+        val_set = SignLanguageFeaturesDataset(**dataloader_args, split="val", verbose=False)
+        test_set = SignLanguageFeaturesDataset(**dataloader_args, split="test")
+        dim_source = train_set
+        logger.info(f"Datasets ready | Train={len(train_set)} Val={len(val_set)} Test={len(test_set)} | "
+                    f"classes={len(train_set.gloss2idx)} feat_dim={train_set.feature_dim} max_len={train_set.max_len}")
+
+    input_dim, num_classes = dim_source.feature_dim, len(dim_source.gloss2idx)
+
     logger.info(f"--- Building model: {args.model} ---")
-
-    # We build a temporary dataset just to infer dimensions.
-    temp_dataset = SignLanguageFeaturesDataset(**dataloader_args, split='val', verbose=False)
-    input_dim, num_classes = temp_dataset.feature_dim, len(temp_dataset.gloss2idx)
-    del temp_dataset  # Free up memory
-
     if args.model == 'baseline_transformer':
         model = BaselineTransformerClassification(input_dim=input_dim, num_classes=num_classes,
                                                   hidden_dim=args.hidden_dim, num_layers=args.n_layers,
@@ -266,7 +279,6 @@ def train(args):
         logger.info(f"--- Evaluation-only | checkpoint: {args.checkpoint_path} ---")
         model.load_state_dict(torch.load(args.checkpoint_path, map_location=device))
 
-        test_set = SignLanguageFeaturesDataset(**dataloader_args, split="test")
         test_loader = DataLoader(test_set, shuffle=False, batch_size=args.batch_size)
 
         loss_fn = nn.CrossEntropyLoss()
@@ -296,19 +308,9 @@ def train(args):
         return  # Exit the function cleanly
 
     # --- If not evaluate_only, proceed with the full training pipeline ---
-    logger.info("--- Loading datasets ---")
-    train_set = SignLanguageFeaturesDataset(**dataloader_args, split="train", verbose=False)
-    val_set = SignLanguageFeaturesDataset(**dataloader_args, split="val", verbose=False)
-    test_set = SignLanguageFeaturesDataset(**dataloader_args, split="test")
-
-    logger.info(f"Datasets ready | Train={len(train_set)} Val={len(val_set)} Test={len(test_set)} | "
-                f"classes={len(train_set.gloss2idx)} feat_dim={train_set.feature_dim} max_len={train_set.max_len}")
-
     train_loader = DataLoader(train_set, shuffle=True, batch_size=args.batch_size)
     val_loader = DataLoader(val_set, shuffle=False, batch_size=args.batch_size)
     test_loader = DataLoader(test_set, shuffle=False, batch_size=args.batch_size)
-
-    input_dim, hidden_dim, num_classes = train_set.feature_dim, train_set.feature_dim, len(train_set.gloss2idx)
 
     total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     gpu_mem = f" | GPU mem: {torch.cuda.memory_allocated() / 1024 ** 2:.0f} MB" if device.type == 'cuda' else ""
@@ -355,11 +357,12 @@ def train(args):
             logger.info(
                 f"[Epoch {epoch + 1:03d}] Train Loss: {avg_train_loss:.4f} | Train Acc: {avg_train_acc:.4f} | Val Loss: {avg_val_loss:.4f} | Val Acc: {avg_val_acc:.4f}")
 
-        if args.save_checkpoints and avg_val_acc > best_val_acc:
+        if avg_val_acc > best_val_acc:
             best_val_acc = avg_val_acc
-            best_model_path = checkpoint_dir / "best_model.pth"
-            torch.save(model.state_dict(), best_model_path)
-            logger.info(f"  -> Saved new best model (Val Acc: {best_val_acc:.4f})")
+            if args.save_checkpoints:
+                best_model_path = checkpoint_dir / "best_model.pth"
+                torch.save(model.state_dict(), best_model_path)
+                logger.info(f"  -> Saved new best model (Val Acc: {best_val_acc:.4f})")
 
         lr_progress.append(optimizer.param_groups[0]['lr'])
 
