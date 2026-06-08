@@ -8,8 +8,8 @@ This repository contains the official implementation for the Bachelor Thesis "Ex
 
 ### 1.1 Clone the repository
 ```bash
-git clone https://github.com/georgebaher/SLR.git
-cd SLR
+git clone https://github.com/georgebaher/Sign-Language-Recognition-using-Lightweight-Transformers.git
+cd Sign-Language-Recognition-using-Lightweight-Transformers
 git checkout iberspeech26
 ```
 
@@ -218,7 +218,7 @@ Paste these four cells:
 
 ```python
 # Cell 1 — clone the iberspeech26 branch into the writable working dir
-!git clone -b iberspeech26 https://github.com/georgebaher/SLR.git /kaggle/working/SLR
+!git clone -b iberspeech26 https://github.com/georgebaher/Sign-Language-Recognition-using-Lightweight-Transformers.git /kaggle/working/SLR
 %cd /kaggle/working/SLR
 ```
 
