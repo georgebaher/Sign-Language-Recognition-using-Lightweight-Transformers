@@ -27,12 +27,13 @@ class SPOTERTransformer(nn.Module):
         self.decoder = nn.TransformerDecoder(decoder_layer, num_layers=num_layers)
         self.classifier = nn.Linear(hidden_dim, num_classes)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, lengths=None) -> torch.Tensor:
         # x: [B, T, input_dim]
         B, T, _ = x.shape
 
         # Pad mask: True where padding exists (computed on raw input before embedding)
-        pad_mask = (x == -2).all(dim=-1)  # [B, T]
+        pad_mask = ((x == -2).all(dim=-1) if lengths is None else
+                    torch.arange(T, device=x.device)[None, :] >= lengths.to(x.device)[:, None])
         is_fully_padded = pad_mask.all(dim=1)  # [B], True for sequences that are all padding
 
         # Replace missing values with 0

@@ -1,0 +1,21 @@
+{
+  "protocol_reviewed": false,
+  "datasets": {
+    "wlasl": {"metadata": "/content/fg2027_data/wlasl/metadata.json", "features_dir": "/content/fg2027_data/wlasl/vitpose"},
+    "avasag": {"metadata": "/content/fg2027_data/avasag/metadata.json", "features_dir": "/content/fg2027_data/avasag/vitpose"}
+  },
+  "output_dir": "/content/drive/MyDrive/FG2027/runs",
+  "pose_indices": [0,1,2,3,4,5,6,7,8,9,10,11,12],
+  "seeds": [379,380,381],
+  "hidden_dim": 256,
+  "n_heads": 8,
+  "n_layers": 6,
+  "bilstm_layers": 1,
+  "pe": "none",
+  "dropout": 0.0,
+  "epochs": 100,
+  "batch_size": 32,
+  "lr": 0.0001,
+  "weight_decay": 0.01,
+  "clip_gradients": 0.0
+}

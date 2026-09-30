@@ -41,55 +41,13 @@ class BiLSTMClassifier(nn.Module):
         #    dimension must be `hidden_dim * 2`.
         self.classifier = nn.Linear(hidden_dim * 2, num_classes)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Forward pass of the Bi-LSTM classifier.
-
-        Args:
-            x (torch.Tensor): Input tensor of shape [Batch, SequenceLength, FeatureDim].
-                              Assumes padding is represented by rows where all features are -2.0.
-
-        Returns:
-            torch.Tensor: Logits tensor of shape [Batch, NumClasses].
-        """
-        # Get batch size
-        B = x.size(0)
-
-        # --- 1. Handle Padding ---
-        # Create a mask to identify padded timesteps
-        pad_mask = (x == -2).all(dim=-1) # [B, T]
-        # Zero out the padded values, so they don't affect the LSTM's calculations
-        x = x.clone()
-        x[x == -2] = 0.0
-
-        # --- 2. Forward Pass through LSTM ---
-        # The output `lstm_out` will have shape [B, T, hidden_dim * 2]
-        # The first `hidden_dim` channels are the forward pass outputs.
-        # The next `hidden_dim` channels are the backward pass outputs.
-        lstm_out, _ = self.lstm(x)
-
-        # --- 3. Extract the Correct Final Hidden States ---
-        # Calculate the actual length of each sequence in the batch
-        lengths = (~pad_mask).sum(dim=1)
-
-        # For the FORWARD pass, we need the hidden state at the LAST valid timestep.
-        # This represents the context from the beginning to the end of the sequence.
-        # We select from the first half of the feature dimension.
-        forward_out = lstm_out[torch.arange(B), lengths-1, :self.hidden_dim]
-
-        # For the BACKWARD pass, the most comprehensive hidden state (representing
-        # context from the end to the beginning) is at the FIRST timestep (index 0).
-        # We select from the second half of the feature dimension.
-        backward_out = lstm_out[:, 0, self.hidden_dim:]
-
-        # --- 4. Concatenate and Classify ---
-        # Concatenate the final forward and backward states to get the full representation
-        final_out = torch.cat((forward_out, backward_out), dim=1)
-
-        # Pass the combined representation to the classifier
-        logits = self.classifier(final_out)
-
-        # --- 5. Final Sanity Check ---
-        assert logits.shape == (B, self.classifier.out_features)
-
-        return logits
+    def forward(self, x: torch.Tensor, lengths=None) -> torch.Tensor:
+        if lengths is None:
+            lengths = (~(x == -2).all(dim=-1)).sum(dim=1)
+        if (lengths <= 0).any():
+            raise ValueError("BiLSTM requires positive sequence lengths")
+        x = x.masked_fill(x == -2, 0.)
+        packed = nn.utils.rnn.pack_padded_sequence(
+            x, lengths.cpu(), batch_first=True, enforce_sorted=False)
+        _, (hidden, _) = self.lstm(packed)
+        return self.classifier(torch.cat((hidden[-2], hidden[-1]), dim=1))

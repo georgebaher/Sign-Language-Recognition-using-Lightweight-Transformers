@@ -8,15 +8,18 @@ def train_epoch_batch(model, dataloader, loss_fn, optimizer, device, scheduler=N
     running_loss = 0.0
 
     for i, data in enumerate(dataloader):
-        batch, labels = data
+        batch, labels, *extra = data
+        lengths = extra[0] if extra else None
 
         batch = batch.to(device)
         labels = labels.to(device, dtype=torch.long)
 
         optimizer.zero_grad()
-        outputs = model(batch)  # [B, num_classes]
+        outputs = model(batch, lengths) if lengths is not None else model(batch)  # [B, num_classes]
 
         loss = loss_fn(outputs, labels)
+        if not torch.isfinite(outputs).all() or not torch.isfinite(loss):
+            raise FloatingPointError("Non-finite training logits/loss")
         loss.backward()
 
         # Clip gradients to prevent them from exploding. clip_gradients is the
@@ -24,19 +27,22 @@ def train_epoch_batch(model, dataloader, loss_fn, optimizer, device, scheduler=N
         if clip_gradients:
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=clip_gradients)
 
+        if any(p.grad is not None and not torch.isfinite(p.grad).all() for p in model.parameters()):
+            raise FloatingPointError("Non-finite gradients")
+
         # Step optimizer and scheduler
         optimizer.step()
         if scheduler:
             scheduler.step()
 
-        running_loss += loss.item()
+        running_loss += loss.item() * labels.size(0)
 
         # Statistics
         preds = torch.argmax(outputs, dim=1)
         pred_correct += torch.sum(preds == labels).item()
         pred_all += labels.size(0)
 
-    average_running_loss = running_loss / len(dataloader)
+    average_running_loss = running_loss / pred_all
     average_running_acc = pred_correct / pred_all
 
     return average_running_loss, average_running_acc
@@ -52,14 +58,17 @@ def evaluate_batch(model, loss_fn, dataloader, device, return_preds=False):
 
     with torch.no_grad():
         for i, data in enumerate(dataloader):
-            batch, labels = data
+            batch, labels, *extra = data
+            lengths = extra[0] if extra else None
 
             batch = batch.to(device)
             labels = labels.to(device, dtype=torch.long)
 
-            outputs = model(batch)  # [B, num_classes]
+            outputs = model(batch, lengths) if lengths is not None else model(batch)  # [B, num_classes]
             loss = loss_fn(outputs, labels)
-            val_loss += loss.item()
+            if not torch.isfinite(outputs).all() or not torch.isfinite(loss):
+                raise FloatingPointError("Non-finite evaluation logits/loss")
+            val_loss += loss.item() * labels.size(0)
 
             preds = torch.argmax(outputs, dim=1)
             all_preds.extend(preds.cpu().numpy())
@@ -68,7 +77,7 @@ def evaluate_batch(model, loss_fn, dataloader, device, return_preds=False):
             pred_correct += torch.sum(preds == labels).item()
             pred_all += labels.size(0)
 
-    average_val_loss = val_loss / len(dataloader)
+    average_val_loss = val_loss / pred_all
     average_val_acc = pred_correct / pred_all
 
     if return_preds:
