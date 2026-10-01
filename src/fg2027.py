@@ -250,7 +250,12 @@ def main():
     if not specs:
         raise ValueError('No matching experiment configurations')
     for dataset in dict.fromkeys(s['dataset'] for s in specs):
-        store = FeatureStore({**config['datasets'][dataset], 'pose_indices': config['pose_indices']})
+        # Combine this dataset's paths with the shared pose selection.
+        store_config = {
+            **config['datasets'][dataset],
+            'pose_indices': config['pose_indices'],
+        }
+        store = FeatureStore(store_config)
         report = store.report()
         write_json(out / dataset / 'data_audit.json', report)
         print(dataset, report['counts'], report['missingness'], flush=True)

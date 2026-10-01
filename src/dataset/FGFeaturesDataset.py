@@ -23,6 +23,11 @@ def sha256(path):
 
 class FeatureStore:
     def __init__(self, config):
+        """Load features using metadata, features_dir, and pose_indices keys.
+
+        The caller combines config['datasets'][dataset] from the experiment
+        configuration with its top-level pose_indices before passing it here.
+        """
         self.config = config
         self.columns = {
             'hand_landmarks': [f'h{i}_{axis}' for i in range(42) for axis in 'xy'],
