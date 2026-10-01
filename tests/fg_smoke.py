@@ -6,6 +6,29 @@ from src.models.BiLSTM import BiLSTMClassifier
 from src.models.FGLateFusion import FGLateFusion
 
 
+def check_reporting():
+    """A completed single-seed run must show its score, not Pending or a fake SD."""
+    import csv
+    import json
+    import tempfile
+    from pathlib import Path
+    from src.fg2027 import matrix, run_name, summarize
+    config = {'datasets': {'wlasl': {}, 'avasag': {}}, 'seeds': [379]}
+    specs = list(matrix(config))
+    assert len(specs) == 22 and len({run_name(s) for s in specs}) == 22
+    with tempfile.TemporaryDirectory() as directory:
+        out = Path(directory)
+        spec = specs[0]
+        path = out / run_name(spec) / 'metrics.json'
+        path.parent.mkdir(parents=True)
+        path.write_text(json.dumps({**spec, 'accuracy': .5, 'macro_f1': .4, 'weighted_f1': .45}))
+        summarize(config, out)
+        rows = list(csv.DictReader((out / 'results.csv').open()))
+        assert len(rows) == 22 and sum(r['status'] == 'completed' for r in rows) == 1
+        assert '| 1/1 | 50.00 | 40.00 | 45.00 |' in (out / 'results.md').read_text()
+    print('Single-seed matrix and reporting: PASS')
+
+
 def check_models():
     torch.manual_seed(379)
     for dim, parts in [(84, [84]), (110, [84, 26]), (246, [84, 26, 136])]:

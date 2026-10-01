@@ -87,9 +87,10 @@ def environment():
 
 
 def smoke(store, config, dataset, out):
-    from tests.fg_smoke import check_models, check_data
+    from tests.fg_smoke import check_models, check_data, check_reporting
     seed_all(config['seeds'][0])
     check_data()
+    check_reporting()
     check_models()
     device = 'cuda'
     for spec in matrix(config):
@@ -102,7 +103,7 @@ def smoke(store, config, dataset, out):
         batch, lengths = batch[:, :32], lengths.clamp_max(32)
         model = build_model(spec, store, config).to(device)
         loss_fn = torch.nn.CrossEntropyLoss()
-        optimizer = torch.optim.AdamW(model.parameters(), lr=config['lr'])
+        optimizer = torch.optim.AdamW(model.parameters(), lr=config['lr'], weight_decay=config['weight_decay'])
         train_epoch_batch(model, [(batch, labels, lengths)], loss_fn, optimizer, device)
         valid = FGFeaturesDataset(store, 'val', spec['modalities'])
         vx, vy, vl = next(iter(DataLoader(Subset(valid, range(min(2, len(valid)))), batch_size=2, collate_fn=collate)))
@@ -223,10 +224,14 @@ def summarize(config, out):
         line = [dataset, model, modality, str(len(available)) + '/' + str(len(config['seeds']))]
         for metric in ('accuracy', 'macro_f1', 'weighted_f1'):
             values = [r[metric] * 100 for r in available]
-            line.append(f'{np.mean(values):.2f} ± {np.std(values, ddof=1):.2f}' if len(values) >= 2 else 'Pending')
+            if len(values) >= 2:
+                line.append(f'{np.mean(values):.2f} ± {np.std(values, ddof=1):.2f}')
+            else:
+                line.append(f'{values[0]:.2f}' if values else 'Pending')
         grouped.append('| ' + ' | '.join(line) + ' |')
     (out / 'results.md').write_text('| Dataset | Model | Input | Seeds | Accuracy | Macro F1 | Weighted F1 |\n'
-        '|---|---|---|---|---|---|---|\n' + '\n'.join(grouped) + '\n\nValues are mean ± sample SD across seeds, not confidence intervals.\n')
+        '|---|---|---|---|---|---|---|\n' + '\n'.join(grouped) +
+        '\n\nOne completed seed: score only. Multiple completed seeds: mean ± sample SD, not confidence intervals.\n')
     print(out / 'results.csv')
 
 
