@@ -99,11 +99,11 @@ class FeatureStore:
         for video_id, rows in merged.groupby(level='video_id', sort=False):
             values = rows[all_columns].to_numpy(dtype=np.float32)
             if (values == -2).all():
-                raise ValueError(f'Completely missing clip: {video_id}; resolve cohort policy before training')
+                raise ValueError(f'Video {video_id} has feature rows, but all coordinates are missing (-2).')
             self.frames[video_id] = values
         absent_ids = set(labels) - set(self.frames)
         if absent_ids:
-            raise ValueError(f'{len(absent_ids)} metadata clips lack all features; examples: {sorted(absent_ids)[:5]}')
+            raise ValueError(f'{len(absent_ids)} videos listed in metadata have no feature rows in any modality. Examples: {sorted(absent_ids)[:5]}')
         self.indices = {}
         offset = 0
         for modality, columns in self.columns.items():
