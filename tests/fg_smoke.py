@@ -110,14 +110,24 @@ def check_data():
             assert 'duplicate rows' in str(error)
         else:
             raise AssertionError('Duplicate frames were accepted')
-        # A second person in a frame: the frame stays, but its hand values become missing.
-        extra = originals['hand_landmarks'].iloc[:1].assign(person_id=1)
-        pd.concat([originals['hand_landmarks'], extra]).to_parquet(path)
-        two_people = FeatureStore(cfg)
-        frame = int(extra.frame.iloc[0])
-        hands = two_people.frames['0_train'][:, :84]
-        assert hands.shape[0] == 3 and (hands[frame] == -2).all() and (hands[frame - 1] != -2).all()
-        assert two_people.multi_person_frames['hand_landmarks'] == [['0_train', frame]]
+        # A second person in one frame of every modality. The person nearer the horizontal
+        # image centre is kept for all modalities, whatever its ID; no frame is lost.
+        frame = 2  # the signer's coordinates are 0.2 here, i.e. 0.3 from the centre
+
+        def add_person(x):
+            for modality, original in originals.items():
+                extra = original[(original.video_id == '0_train') & (original.frame == frame)].assign(person_id=1)
+                extra[[c for c in extra if c.endswith(('_x', '_y'))]] = x
+                pd.concat([original, extra]).sample(frac=1, random_state=1).to_parquet(root / f'{modality}.parquet')
+            return FeatureStore(cfg)
+        central = add_person(.5)
+        assert central.frames['0_train'].shape == (3, 246) and (central.frames['0_train'][frame] == .5).all()
+        assert central.person_choices == [['0_train', frame, 1]]
+        at_edge = add_person(.95)
+        assert (at_edge.frames['0_train'][frame] == np.float32(.2)).all()
+        assert at_edge.person_choices == [['0_train', frame, 0]] and at_edge.splits == store.splits
+        for modality, original in originals.items():
+            original.to_parquet(root / f'{modality}.parquet')
         # Points slightly past the frame edge are kept unchanged; unscaled pixels are rejected.
         edge = originals['hand_landmarks'].copy()
         edge.loc[edge.index[0], 'h0_y'] = 1.08

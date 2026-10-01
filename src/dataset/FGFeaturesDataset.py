@@ -1,6 +1,7 @@
 """Strict ViTPose loading: explicit frame alignment and identical samples for all ablations."""
 import hashlib
 import json
+from collections import Counter
 from pathlib import Path
 
 import numpy as np
@@ -19,6 +20,40 @@ def sha256(path):
         for chunk in iter(lambda: stream.read(1024 * 1024), b''):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def keep_central_person(tables, pose_columns):
+    """Keep one person per frame across all modalities.
+
+    In frames with several detected people, keep the person whose visible pose
+    points are on average closest to the horizontal image centre (ties: lowest
+    person ID). The choice comes from pose and applies to every modality, so
+    hands, pose and face always come from the same person. If no candidate has
+    a visible pose point, no detection is kept and the frame becomes missing.
+    Returns the filtered tables and one [video_id, frame, person_id or None]
+    record per affected frame.
+    """
+    keys = ['video_id', 'frame']
+    people = pd.concat([t[keys + ['person_id']] for t in tables.values()]).drop_duplicates()
+    multi = people[people.duplicated(keys, keep=False)][keys].drop_duplicates()
+    if multi.empty:
+        return tables, []
+    pose = tables['pose_landmarks'].merge(multi, on=keys)
+    x = pose[pose_columns[0::2]].to_numpy(dtype=float)  # columns alternate _x, _y
+    seen = x != -2
+    centre = np.where(seen, x, 0).sum(1) / np.maximum(seen.sum(1), 1)
+    pose = pose.assign(offset=np.where(seen.any(1), np.abs(centre - .5), np.nan))
+    chosen = (pose.dropna(subset=['offset']).sort_values(keys + ['offset', 'person_id'])
+              .drop_duplicates(keys)[keys + ['person_id']])
+    multi_index, chosen_index = pd.MultiIndex.from_frame(multi), pd.MultiIndex.from_frame(chosen)
+    selected = {}
+    for modality, df in tables.items():
+        in_multi = pd.MultiIndex.from_frame(df[keys]).isin(multi_index)
+        is_chosen = pd.MultiIndex.from_frame(df[keys + ['person_id']]).isin(chosen_index)
+        selected[modality] = df[~in_multi | is_chosen]
+    decisions = multi.merge(chosen, on=keys, how='left')
+    records = [[v, int(f), None if pd.isna(p) else int(p)] for v, f, p in decisions.itertuples(index=False)]
+    return selected, records
 
 
 class FeatureStore:
@@ -57,9 +92,8 @@ class FeatureStore:
             raise ValueError('Every class must have a training example.')
         self.labels = labels
         self.hashes = {'metadata': sha256(config['metadata'])}
-        merged = None
+        tables = {}
         self.missing = {}
-        self.multi_person_frames = {}
         self.outside_unit_range = {}
         # Load every modality even for H: timeline and cohort stay identical across ablations.
         for modality, columns in self.columns.items():
@@ -79,21 +113,14 @@ class FeatureStore:
                 raise ValueError('Invalid frame IDs')
             if (df.frame < 0).any() or (df.frame % 1 != 0).any():
                 raise ValueError('Frame IDs must be non-negative integers')
-            identity = ['video_id', 'frame'] + (['person_id'] if 'person_id' in df else [])
-            if df.duplicated(identity).any():
+            if 'person_id' not in df:
+                df['person_id'] = 0
+            if (df.person_id.isna().any() or not np.isfinite(df.person_id.to_numpy(dtype=float)).all() or
+                    (df.person_id < -1).any() or (df.person_id % 1 != 0).any()):
+                raise ValueError(f'{path.name}: person IDs must be integers >= -1')
+            df['frame'], df['person_id'] = df.frame.astype('int64'), df.person_id.astype('int64')
+            if df.duplicated(['video_id', 'frame', 'person_id']).any():
                 raise ValueError(f'{path.name}: duplicate rows for the same video/frame/person')
-            # Frames with several detected people: keep the frame but mark it missing,
-            # instead of guessing which person is the signer.
-            multi = df.duplicated(['video_id', 'frame'], keep=False)
-            self.multi_person_frames[modality] = [[v, int(f)] for v, f in
-                df.loc[multi, ['video_id', 'frame']].drop_duplicates().itertuples(index=False)]
-            df.loc[multi, columns] = np.nan
-            if 'person_id' in df:
-                df.loc[multi, 'person_id'] = -1
-            df = df.drop_duplicates(['video_id', 'frame'])
-            if 'person_id' in df:
-                if df.person_id.isna().any() or not df.person_id.isin([-1, 0]).all():
-                    raise ValueError('Unexpected person IDs; inspect extraction/signer selection.')
             if not (df.gloss == df.video_id.map(labels)).all():
                 raise ValueError(f'{path.name}: gloss/metadata mismatch')
             values = df[columns].to_numpy(dtype=np.float32)
@@ -107,11 +134,17 @@ class FeatureStore:
                 raise ValueError(f'{path.name}: coordinates far outside [0,1]; verify normalization before training')
             self.outside_unit_range[modality] = float(((observed < 0) | (observed > 1)).mean())
             df[columns] = values
+            tables[modality] = df[['video_id', 'frame', 'person_id'] + columns]
+        keys = ['video_id', 'frame']
+        all_frames = pd.MultiIndex.from_frame(pd.concat([t[keys] for t in tables.values()]).drop_duplicates())
+        tables, self.person_choices = keep_central_person(tables, self.columns['pose_landmarks'])
+        merged = None
+        for modality, columns in self.columns.items():
             # Index by video ID and frame ID to align modalities on the same frames.
-            part = df.set_index(['video_id', 'frame'])[columns]
+            part = tables[modality].set_index(keys)[columns]
             merged = part if merged is None else merged.join(part, how='outer', validate='one_to_one')
-        # Sort by video ID, then frame ID; mark missing coordinates as -2.
-        merged = merged.sort_index().fillna(-2.)
+        # Keep every original frame, sorted by video ID then frame ID; mark missing coordinates as -2.
+        merged = merged.reindex(all_frames).sort_index().fillna(-2.)
         self.frames = {}
         all_columns = sum(self.columns.values(), [])
         for video_id, rows in merged.groupby(level='video_id', sort=False):
@@ -136,7 +169,12 @@ class FeatureStore:
     def report(self):
         return {'sha256': self.hashes, 'split_ids': self.splits, 'gloss2idx': self.gloss2idx,
                 'columns': self.columns, 'missingness': self.missing,
-                'multi_person_frames_marked_missing': self.multi_person_frames,
+                'person_selection': {
+                    'rule': 'in frames with several people, keep the one whose visible pose points '
+                            'are on average closest to the horizontal image centre; same person for all modalities',
+                    'frames': len(self.person_choices),
+                    'chosen_person_ids': dict(Counter(str(p) for _, _, p in self.person_choices)),
+                    'choices': self.person_choices},
                 'fraction_outside_0_1': self.outside_unit_range,
                 'counts': {s: len(v) for s, v in self.splits.items()},
                 'length_min': min(map(len, self.frames.values())),

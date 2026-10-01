@@ -264,6 +264,7 @@ def main():
         report = store.report()
         write_json(out / dataset / 'data_audit.json', report)
         print(dataset, report['counts'], report['missingness'], flush=True)
+        print('Person selection:', {k: v for k, v in report['person_selection'].items() if k != 'choices'}, flush=True)
         if args.action == 'audit':
             continue
         if args.action == 'smoke':
