@@ -60,6 +60,7 @@ class FeatureStore:
         merged = None
         self.missing = {}
         self.multi_person_frames = {}
+        self.outside_unit_range = {}
         # Load every modality even for H: timeline and cohort stay identical across ablations.
         for modality, columns in self.columns.items():
             path = Path(config['features_dir']) / f'{modality}.parquet'
@@ -99,9 +100,12 @@ class FeatureStore:
             values = np.where(np.isnan(values), -2., values)
             if not np.isfinite(values).all():
                 raise ValueError(f'{path.name}: infinite feature values')
-            observed = values != -2
-            if ((values[observed] < 0) | (values[observed] > 1)).any():
-                raise ValueError(f'{path.name}: coordinates outside [0,1]; verify normalization before training')
+            observed = values[values != -2]
+            # ViTPose can place points slightly past the frame edge; keep them unchanged.
+            # The wider limit still catches coordinates that were never scaled to [0,1].
+            if ((observed < -0.5) | (observed > 1.5)).any():
+                raise ValueError(f'{path.name}: coordinates far outside [0,1]; verify normalization before training')
+            self.outside_unit_range[modality] = float(((observed < 0) | (observed > 1)).mean())
             df[columns] = values
             # Index by video ID and frame ID to align modalities on the same frames.
             part = df.set_index(['video_id', 'frame'])[columns]
@@ -133,6 +137,7 @@ class FeatureStore:
         return {'sha256': self.hashes, 'split_ids': self.splits, 'gloss2idx': self.gloss2idx,
                 'columns': self.columns, 'missingness': self.missing,
                 'multi_person_frames_marked_missing': self.multi_person_frames,
+                'fraction_outside_0_1': self.outside_unit_range,
                 'counts': {s: len(v) for s, v in self.splits.items()},
                 'length_min': min(map(len, self.frames.values())),
                 'length_max': max(map(len, self.frames.values()))}

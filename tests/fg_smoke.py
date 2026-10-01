@@ -118,6 +118,19 @@ def check_data():
         hands = two_people.frames['0_train'][:, :84]
         assert hands.shape[0] == 3 and (hands[frame] == -2).all() and (hands[frame - 1] != -2).all()
         assert two_people.multi_person_frames['hand_landmarks'] == [['0_train', frame]]
+        # Points slightly past the frame edge are kept unchanged; unscaled pixels are rejected.
+        edge = originals['hand_landmarks'].copy()
+        edge.loc[edge.index[0], 'h0_y'] = 1.08
+        edge.to_parquet(path)
+        assert FeatureStore(cfg).frames['0_train'][frame, 1] == np.float32(1.08)
+        edge.loc[edge.index[0], 'h0_y'] = 540.
+        edge.to_parquet(path)
+        try:
+            FeatureStore(cfg)
+        except ValueError as error:
+            assert 'far outside' in str(error)
+        else:
+            raise AssertionError('Unscaled pixel coordinates were accepted')
         originals['hand_landmarks'].to_parquet(path)
         metadata[0]['instances'][2]['video_id'] = metadata[0]['instances'][0]['video_id']
         (root / 'metadata.json').write_text(json.dumps(metadata))
