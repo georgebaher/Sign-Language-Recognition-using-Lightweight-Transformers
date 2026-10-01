@@ -69,6 +69,7 @@ class FeatureStore:
             if absent:
                 raise ValueError(f'{path.name}: missing columns {sorted(absent)}. Do not infer frame IDs from row order.')
             df['video_id'] = df.video_id.astype(str)
+            # Keep only rows for video IDs in the selected metadata.
             df = df[df.video_id.isin(labels)].copy()
             if df.empty:
                 raise ValueError(f'{path.name}: no matching video IDs')
@@ -91,8 +92,10 @@ class FeatureStore:
             if ((values[observed] < 0) | (values[observed] > 1)).any():
                 raise ValueError(f'{path.name}: coordinates outside [0,1]; verify normalization before training')
             df[columns] = values
+            # Index by video ID and frame ID to align modalities on the same frames.
             part = df.set_index(['video_id', 'frame'])[columns]
             merged = part if merged is None else merged.join(part, how='outer', validate='one_to_one')
+        # Sort by video ID, then frame ID; mark missing coordinates as -2.
         merged = merged.sort_index().fillna(-2.)
         self.frames = {}
         all_columns = sum(self.columns.values(), [])
@@ -125,7 +128,9 @@ class FeatureStore:
 
 class FGFeaturesDataset(Dataset):
     def __init__(self, store, split, modalities):
+        """Select a FeatureStore split ('train', 'val', 'test') and inputs ('H', 'HP', 'HPF')."""
         self.store, self.ids = store, store.splits[split]
+        # Concatenate the column-index lists for the requested modalities.
         self.indices = sum((store.indices[m] for m in MODALITIES[modalities]), [])
         self.feature_dim = len(self.indices)
 
@@ -134,12 +139,19 @@ class FGFeaturesDataset(Dataset):
 
     def __getitem__(self, index):
         video_id = self.ids[index]
-        # Missing observations stay -2; true sequence lengths are passed separately.
+        # Keep missing observations as -2; collate records lengths before padding.
         x = torch.from_numpy(self.store.frames[video_id][:, self.indices].copy())
+        # x: tensor shaped [frames, selected_features], e.g. [30, 110] for HP with 13 pose landmarks.
+        # The second return value is the integer class ID for this video's gloss.
         return x, self.store.gloss2idx[self.store.labels[video_id]]
 
 
 def collate(batch):
+    """Batch (x, label) pairs: x is [frames, features], label is an integer class ID."""
+    # Unpack the pairs into a tuple of video tensors and a tuple of labels.
     x, labels = zip(*batch)
+    # Record each video's frame count before adding batch padding.
     lengths = torch.tensor([len(v) for v in x], dtype=torch.long)
+    # Return padded videos [B, T, D], labels [B], and lengths [B].
+    # B = batch size, T = longest video in this batch, D = selected feature count.
     return pad_sequence(x, batch_first=True, padding_value=-2.), torch.tensor(labels), lengths
