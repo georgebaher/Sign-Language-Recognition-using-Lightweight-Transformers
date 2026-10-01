@@ -59,6 +59,7 @@ class FeatureStore:
         self.hashes = {'metadata': sha256(config['metadata'])}
         merged = None
         self.missing = {}
+        self.multi_person_frames = {}
         # Load every modality even for H: timeline and cohort stay identical across ablations.
         for modality, columns in self.columns.items():
             path = Path(config['features_dir']) / f'{modality}.parquet'
@@ -77,8 +78,18 @@ class FeatureStore:
                 raise ValueError('Invalid frame IDs')
             if (df.frame < 0).any() or (df.frame % 1 != 0).any():
                 raise ValueError('Frame IDs must be non-negative integers')
-            if df.duplicated(['video_id', 'frame']).any():
-                raise ValueError(f'{path.name}: multiple people/rows in a frame; signer selection must be resolved first.')
+            identity = ['video_id', 'frame'] + (['person_id'] if 'person_id' in df else [])
+            if df.duplicated(identity).any():
+                raise ValueError(f'{path.name}: duplicate rows for the same video/frame/person')
+            # Frames with several detected people: keep the frame but mark it missing,
+            # instead of guessing which person is the signer.
+            multi = df.duplicated(['video_id', 'frame'], keep=False)
+            self.multi_person_frames[modality] = [[v, int(f)] for v, f in
+                df.loc[multi, ['video_id', 'frame']].drop_duplicates().itertuples(index=False)]
+            df.loc[multi, columns] = np.nan
+            if 'person_id' in df:
+                df.loc[multi, 'person_id'] = -1
+            df = df.drop_duplicates(['video_id', 'frame'])
             if 'person_id' in df:
                 if df.person_id.isna().any() or not df.person_id.isin([-1, 0]).all():
                     raise ValueError('Unexpected person IDs; inspect extraction/signer selection.')
@@ -121,6 +132,7 @@ class FeatureStore:
     def report(self):
         return {'sha256': self.hashes, 'split_ids': self.splits, 'gloss2idx': self.gloss2idx,
                 'columns': self.columns, 'missingness': self.missing,
+                'multi_person_frames_marked_missing': self.multi_person_frames,
                 'counts': {s: len(v) for s, v in self.splits.items()},
                 'length_min': min(map(len, self.frames.values())),
                 'length_max': max(map(len, self.frames.values()))}

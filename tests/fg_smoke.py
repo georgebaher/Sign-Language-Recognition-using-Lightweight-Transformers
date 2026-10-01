@@ -107,9 +107,17 @@ def check_data():
         try:
             FeatureStore(cfg)
         except ValueError as error:
-            assert 'multiple people/rows' in str(error)
+            assert 'duplicate rows' in str(error)
         else:
             raise AssertionError('Duplicate frames were accepted')
+        # A second person in a frame: the frame stays, but its hand values become missing.
+        extra = originals['hand_landmarks'].iloc[:1].assign(person_id=1)
+        pd.concat([originals['hand_landmarks'], extra]).to_parquet(path)
+        two_people = FeatureStore(cfg)
+        frame = int(extra.frame.iloc[0])
+        hands = two_people.frames['0_train'][:, :84]
+        assert hands.shape[0] == 3 and (hands[frame] == -2).all() and (hands[frame - 1] != -2).all()
+        assert two_people.multi_person_frames['hand_landmarks'] == [['0_train', frame]]
         originals['hand_landmarks'].to_parquet(path)
         metadata[0]['instances'][2]['video_id'] = metadata[0]['instances'][0]['video_id']
         (root / 'metadata.json').write_text(json.dumps(metadata))
