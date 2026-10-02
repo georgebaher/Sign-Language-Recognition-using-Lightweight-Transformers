@@ -1,0 +1,19 @@
+{
+  "dataset": "wlasl",
+  "model": "latefusion",
+  "modalities": "HP",
+  "seed": 379,
+  "accuracy": 0.5348837209302325,
+  "macro_f1": 0.5131746031746032,
+  "weighted_f1": 0.513525901316599,
+  "best_val_accuracy": 0.606508875739645,
+  "best_epoch": 91,
+  "parameters": 15860938,
+  "training_seconds": 375.6365554332733,
+  "peak_cuda_memory_bytes": 1682027008,
+  "n_test": 258,
+  "fusion_weights": {
+    "hand_landmarks": 0.6116910576820374,
+    "pose_landmarks": 0.38830891251564026
+  }
+}

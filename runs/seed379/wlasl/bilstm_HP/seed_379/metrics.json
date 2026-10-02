@@ -1,0 +1,15 @@
+{
+  "dataset": "wlasl",
+  "model": "bilstm",
+  "modalities": "HP",
+  "seed": 379,
+  "accuracy": 0.13565891472868216,
+  "macro_f1": 0.09676812076812076,
+  "weighted_f1": 0.09764993834761276,
+  "best_val_accuracy": 0.16272189349112426,
+  "best_epoch": 87,
+  "parameters": 804964,
+  "training_seconds": 65.22334027290344,
+  "peak_cuda_memory_bytes": 176009216,
+  "n_test": 258
+}

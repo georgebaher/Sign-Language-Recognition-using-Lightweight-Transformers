@@ -1,0 +1,9 @@
+{
+  "python": "3.14.7 (main, Aug 10 2026, 00:00:00) [GCC 16.1.1 20260515 (Red Hat 16.1.1-2)]",
+  "torch": "2.14.1+cu130",
+  "cuda": "13.0",
+  "gpu": "NVIDIA GeForce RTX 5070 Laptop GPU",
+  "git_commit": "c3485225855e7eb86abd9ae259af152a345d5759",
+  "git_dirty": false,
+  "source_sha256": "4e5162aa79dfbf2ab02750fcb07143bfad3a7979bb8fe3462da5cdf00bc60849"
+}

@@ -15,7 +15,6 @@ out-logs/
 out-checkpoints/
 out-img/
 evaluation_results/
-runs/
 .venv/
 
 *.parquet
@@ -34,3 +33,8 @@ runs/
 
 # VS Code settings
 .vscode/
+# Experiment outputs are tracked, except model checkpoints (kept locally; runs are deterministic).
+!runs/**/*.csv
+!runs/**/*.txt
+runs/**/*.pt
+runs/**/*.tmp

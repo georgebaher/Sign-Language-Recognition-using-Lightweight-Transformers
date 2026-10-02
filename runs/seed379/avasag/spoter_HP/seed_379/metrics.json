@@ -1,0 +1,15 @@
+{
+  "dataset": "avasag",
+  "model": "spoter",
+  "modalities": "HP",
+  "seed": 379,
+  "accuracy": 0.8179775280898877,
+  "macro_f1": 0.7499960966212167,
+  "weighted_f1": 0.8112330778067701,
+  "best_val_accuracy": 0.833922261484099,
+  "best_epoch": 95,
+  "parameters": 17417316,
+  "training_seconds": 382.42311787605286,
+  "peak_cuda_memory_bytes": 911084544,
+  "n_test": 890
+}

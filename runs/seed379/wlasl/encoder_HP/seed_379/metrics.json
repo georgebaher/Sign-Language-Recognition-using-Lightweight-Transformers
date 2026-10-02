@@ -1,0 +1,15 @@
+{
+  "dataset": "wlasl",
+  "model": "encoder",
+  "modalities": "HP",
+  "seed": 379,
+  "accuracy": 0.5310077519379846,
+  "macro_f1": 0.5159761904761904,
+  "weighted_f1": 0.5197797465239326,
+  "best_val_accuracy": 0.5976331360946746,
+  "best_epoch": 84,
+  "parameters": 7944548,
+  "training_seconds": 190.80010652542114,
+  "peak_cuda_memory_bytes": 928930816,
+  "n_test": 258
+}

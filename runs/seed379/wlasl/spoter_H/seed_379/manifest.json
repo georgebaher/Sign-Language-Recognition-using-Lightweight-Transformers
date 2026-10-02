@@ -1,0 +1,58 @@
+{
+  "experiment": {
+    "dataset": "wlasl",
+    "model": "spoter",
+    "modalities": "H",
+    "seed": 379
+  },
+  "config": {
+    "protocol_reviewed": true,
+    "datasets": {
+      "wlasl": {
+        "metadata": "data/wlasl/WLASL_v0.3.json",
+        "features_dir": "data/wlasl/vitpose"
+      },
+      "avasag": {
+        "metadata": "data/avasag/avasag_metadata.json",
+        "features_dir": "data/avasag/vitpose"
+      }
+    },
+    "output_dir": "runs/seed379",
+    "pose_indices": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12
+    ],
+    "seeds": [
+      379
+    ],
+    "hidden_dim": 256,
+    "n_heads": 8,
+    "n_layers": 6,
+    "bilstm_layers": 1,
+    "pe": "none",
+    "dropout": 0.0,
+    "epochs": 100,
+    "batch_size": 32,
+    "lr": 0.0001,
+    "weight_decay": 0.01,
+    "clip_gradients": 0.0
+  },
+  "input_sha256": {
+    "metadata": "3ccea4b0988ae480267628918d5668a653be7ed554684e6f52d73a2266a0ed8d",
+    "hand_landmarks": "51419e719b6410578036747b97c7b76ccbff81cf903606ce3dc3dff164bd418e",
+    "pose_landmarks": "2d46a7e0eebd7011230109f110b86b2167e6bd4b6c44e12a9c1017161f05e3a2",
+    "face_landmarks": "f597827c974d99ea5c507e1fef090a8fa37e23d8313d4af6615ccb076f7e212a"
+  },
+  "source_sha256": "4e5162aa79dfbf2ab02750fcb07143bfad3a7979bb8fe3462da5cdf00bc60849"
+}

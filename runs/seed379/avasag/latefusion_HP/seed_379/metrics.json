@@ -1,0 +1,19 @@
+{
+  "dataset": "avasag",
+  "model": "latefusion",
+  "modalities": "HP",
+  "seed": 379,
+  "accuracy": 0.7764044943820225,
+  "macro_f1": 0.7268909087580263,
+  "weighted_f1": 0.768475761173232,
+  "best_val_accuracy": 0.7962308598351001,
+  "best_epoch": 65,
+  "parameters": 15860938,
+  "training_seconds": 503.3128435611725,
+  "peak_cuda_memory_bytes": 1352164864,
+  "n_test": 890,
+  "fusion_weights": {
+    "hand_landmarks": 0.6203769445419312,
+    "pose_landmarks": 0.37962308526039124
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "dataset": "wlasl",
+  "model": "bilstm",
+  "modalities": "HPF",
+  "seed": 379,
+  "accuracy": 0.1434108527131783,
+  "macro_f1": 0.10763636363636364,
+  "weighted_f1": 0.10476358267055942,
+  "best_val_accuracy": 0.1804733727810651,
+  "best_epoch": 90,
+  "parameters": 1083492,
+  "training_seconds": 77.38260197639465,
+  "peak_cuda_memory_bytes": 187884544,
+  "n_test": 258
+}

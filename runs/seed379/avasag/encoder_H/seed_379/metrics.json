@@ -1,0 +1,15 @@
+{
+  "dataset": "avasag",
+  "model": "encoder",
+  "modalities": "H",
+  "seed": 379,
+  "accuracy": 0.7640449438202247,
+  "macro_f1": 0.7075946465854472,
+  "weighted_f1": 0.7554215370014773,
+  "best_val_accuracy": 0.7985865724381626,
+  "best_epoch": 95,
+  "parameters": 7937892,
+  "training_seconds": 261.79685258865356,
+  "peak_cuda_memory_bytes": 753820672,
+  "n_test": 890
+}

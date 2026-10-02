@@ -1,0 +1,15 @@
+{
+  "dataset": "avasag",
+  "model": "bilstm",
+  "modalities": "H",
+  "seed": 379,
+  "accuracy": 0.6932584269662921,
+  "macro_f1": 0.6119096613588841,
+  "weighted_f1": 0.6770693321333818,
+  "best_val_accuracy": 0.6996466431095406,
+  "best_epoch": 93,
+  "parameters": 751716,
+  "training_seconds": 116.30356216430664,
+  "peak_cuda_memory_bytes": 167502848,
+  "n_test": 890
+}

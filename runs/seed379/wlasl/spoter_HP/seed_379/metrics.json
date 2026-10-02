@@ -1,0 +1,15 @@
+{
+  "dataset": "wlasl",
+  "model": "spoter",
+  "modalities": "HP",
+  "seed": 379,
+  "accuracy": 0.49612403100775193,
+  "macro_f1": 0.4814632034632034,
+  "weighted_f1": 0.48016935691354296,
+  "best_val_accuracy": 0.5680473372781065,
+  "best_epoch": 78,
+  "parameters": 17417316,
+  "training_seconds": 241.38114714622498,
+  "peak_cuda_memory_bytes": 1092357632,
+  "n_test": 258
+}
