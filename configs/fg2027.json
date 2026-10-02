@@ -1,10 +1,10 @@
 {
-  "protocol_reviewed": false,
+  "protocol_reviewed": true,
   "datasets": {
-    "wlasl": {"metadata": "/content/fg2027_data/wlasl/metadata.json", "features_dir": "/content/fg2027_data/wlasl/vitpose"},
-    "avasag": {"metadata": "/content/fg2027_data/avasag/metadata.json", "features_dir": "/content/fg2027_data/avasag/vitpose"}
+    "wlasl": {"metadata": "data/wlasl/WLASL_v0.3.json", "features_dir": "data/wlasl/vitpose"},
+    "avasag": {"metadata": "data/avasag/avasag_metadata.json", "features_dir": "data/avasag/vitpose"}
   },
-  "output_dir": "/content/drive/MyDrive/FG2027/runs_seed379",
+  "output_dir": "runs/seed379",
   "pose_indices": [0,1,2,3,4,5,6,7,8,9,10,11,12],
   "seeds": [379],
   "hidden_dim": 256,

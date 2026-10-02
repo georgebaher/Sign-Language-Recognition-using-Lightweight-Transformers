@@ -31,29 +31,27 @@ encoding. The checkpoint with the best validation accuracy is evaluated once on 
 
 ## Running
 
-Everything runs on **Google Colab with a GPU**. Open
-[notebooks/FG2027.ipynb](notebooks/FG2027.ipynb) in Colab and run the cells in order:
+Runs locally on a machine with a CUDA GPU, from the repository root. Install PyTorch with CUDA
+support for your GPU, then [requirements-fg2027.txt](requirements-fg2027.txt). Put the eight data
+files (metadata + hand/pose/face landmarks per dataset) under `data/`:
 
-1. **Setup** — mounts Drive, clones this branch, installs [requirements-fg2027.txt](requirements-fg2027.txt).
-2. **Download** — fetches the eight data files (metadata + hand/pose/face landmarks per dataset)
-   from the shared Drive folder, checking file sizes and checksums.
-3. **Config** — saves the configuration to `MyDrive/FG2027/config_seed379.json`.
-4. **Audit** — checks the data and writes `data_audit.json` per dataset. Stop and review the output.
-5. **Smoke tests** — synthetic checks plus one short training step for every configuration.
-6. **Pilot** — one full run (WLASL, encoder-only, hands). Review curves, runtime and storage.
-7. **Remaining runs** — one dataset at a time.
-8. **Results** — writes `results.csv` and `results.md`.
+```
+data/<wlasl|avasag>/metadata.json
+data/<wlasl|avasag>/vitpose/{hand,pose,face}_landmarks.parquet
+```
 
-Do not use *Run all*: the notebook asks you to confirm the audit and the pilot before continuing.
-
-The same steps are available from the command line inside Colab:
+Then, in order:
 
 ```bash
-python -m src.fg2027 audit     --config <config.json>
-python -m src.fg2027 smoke     --config <config.json>
-python -m src.fg2027 run       --config <config.json> [--dataset wlasl] [--model encoder] [--modalities H] [--resume]
-python -m src.fg2027 summarize --config <config.json>
+python -m src.fg2027 audit      # check the data; writes data_audit.json per dataset. Review it.
+python -m src.fg2027 smoke      # after setting protocol_reviewed=true in the config
+python -m src.fg2027 run --dataset wlasl --model encoder --modalities H   # pilot; review curves
+python -m src.fg2027 run --dataset wlasl                                  # remaining runs, one dataset at a time
+python -m src.fg2027 run --dataset avasag
+python -m src.fg2027 summarize  # results.csv and results.md
 ```
+
+All commands default to [configs/fg2027.json](configs/fg2027.json); pass `--config` to use another.
 
 ### Safeguards
 
@@ -61,9 +59,8 @@ python -m src.fg2027 summarize --config <config.json>
   and `protocol_reviewed` is `true` in the config.
 - Each run folder records a fingerprint of its data, code and config. Rerunning with anything
   changed stops with an error instead of mixing results.
-- **Resuming:** after an interruption, rerun the same cell with `--resume`. Completed runs are
-  skipped and only the unfinished epoch is repeated. The Python, PyTorch, CUDA and GPU type must
-  match the original run.
+- **No resuming:** completed runs are skipped; a run that was interrupted starts again from
+  epoch 1 when the same command is rerun.
 
 ## Data handling
 
@@ -82,13 +79,13 @@ Every input is loaded for every run, so all 22 runs use exactly the same clips a
 
 ## Outputs
 
-Written to `MyDrive/FG2027/runs_seed379/`:
+Written to `runs/seed379/` (git-ignored):
 
 | Path | Contents |
 | --- | --- |
 | `<dataset>/data_audit.json` | Split counts, missing-data rates, person-selection choices, file checksums |
 | `<dataset>/smoke_pass.json` | Proof the smoke tests passed for this data, code and config |
-| `<dataset>/<model>_<inputs>/seed_379/` | One run: `metrics.json`, `predictions.csv`, `history.json`, `best.pt`, `last.pt`, `manifest.json`, `environment.json`, `pip-freeze.txt`, `status.json` |
+| `<dataset>/<model>_<inputs>/seed_379/` | One run: `metrics.json`, `predictions.csv`, `history.json`, `best.pt`, `manifest.json`, `environment.json`, `pip-freeze.txt`, `status.json` |
 | `results.csv`, `results.md` | Summary of all runs, including parameter counts |
 
 `metrics.json` holds accuracy, macro-F1, weighted-F1, the best validation epoch, parameter count,
@@ -106,4 +103,3 @@ training time and peak GPU memory; for late fusion, also the learned weight of e
 | [tests/fg_smoke.py](tests/fg_smoke.py) | Smoke tests (need a GPU) |
 | [configs/fg2027.json](configs/fg2027.json) | Experiment configuration |
 | [experiments/matrix.csv](experiments/matrix.csv) | The 22 planned runs |
-| [notebooks/FG2027.ipynb](notebooks/FG2027.ipynb) | Guided Colab notebook |

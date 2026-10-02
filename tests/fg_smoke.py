@@ -1,4 +1,4 @@
-"""Run on Colab: meaningful masking, padding, alignment, and leakage checks."""
+"""Smoke tests (need a CUDA GPU): meaningful masking, padding, alignment, and leakage checks."""
 import torch
 from src.models.EncoderOnlyTransformer import EncoderOnly
 from src.models.SPOTER import SPOTERTransformer

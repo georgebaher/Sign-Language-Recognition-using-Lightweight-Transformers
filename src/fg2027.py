@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import random
+import shutil
 import subprocess
 import sys
 import time
@@ -115,7 +116,7 @@ def smoke(store, config, dataset, out):
                'source_sha256': code_hash(), 'config': config, 'status': 'passed'})
 
 
-def train_run(spec, store, config, out, resume=False):
+def train_run(spec, store, config, out):
     run_dir = out / run_name(spec)
     signature = {'experiment': spec, 'config': config, 'input_sha256': store.hashes,
                  'source_sha256': code_hash()}
@@ -126,17 +127,12 @@ def train_run(spec, store, config, out, resume=False):
         if (run_dir / 'metrics.json').exists():
             print('SKIP completed', run_dir, flush=True)
             return
-        if not resume:
-            raise ValueError(f'Incomplete run exists; inspect then pass --resume: {run_dir}')
+        # No resuming: clear the interrupted run so nothing stale survives the restart.
+        print('RESTART incomplete', run_dir, flush=True)
+        shutil.rmtree(run_dir)
     run_dir.mkdir(parents=True, exist_ok=True)
     write_json(run_dir / 'manifest.json', signature)
-    current_env = environment()
-    if (run_dir / 'environment.json').exists():
-        previous_env = json.loads((run_dir / 'environment.json').read_text())
-        if any(previous_env[k] != current_env[k] for k in ('python', 'torch', 'cuda', 'gpu')):
-            raise ValueError('Runtime changed; use the recorded environment before resuming')
-    else:
-        write_json(run_dir / 'environment.json', current_env)
+    write_json(run_dir / 'environment.json', environment())
     (run_dir / 'pip-freeze.txt').write_text(subprocess.check_output([sys.executable, '-m', 'pip', 'freeze'], text=True))
     seed_all(spec['seed'])
     device = 'cuda'
@@ -148,25 +144,10 @@ def train_run(spec, store, config, out, resume=False):
     model = build_model(spec, store, config).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=config['lr'], weight_decay=config['weight_decay'])
     loss_fn = torch.nn.CrossEntropyLoss()
-    start_epoch, best_accuracy, best_epoch, history, elapsed = 0, -1., -1, [], 0.
-    last_path = run_dir / 'last.pt'
-    if resume and last_path.exists():
-        # Only load checkpoints produced by this pipeline in the user's run directory.
-        state = torch.load(last_path, map_location='cpu', weights_only=False)
-        model.load_state_dict(state['model'])
-        optimizer.load_state_dict(state['optimizer'])
-        for values in optimizer.state.values():
-            for key, value in values.items():
-                if torch.is_tensor(value):
-                    values[key] = value.to(device)
-        start_epoch, best_accuracy, best_epoch = state['epoch'] + 1, state['best_accuracy'], state['best_epoch']
-        history, elapsed = state['history'], state['elapsed']
-        random.setstate(state['python_rng']); np.random.set_state(state['numpy_rng'])
-        torch.set_rng_state(state['torch_rng']); torch.cuda.set_rng_state_all(state['cuda_rng'])
-        shuffle_rng.set_state(state['shuffle_rng'])
+    best_accuracy, best_epoch, history, elapsed = -1., -1, [], 0.
     torch.cuda.reset_peak_memory_stats()
-    write_json(run_dir / 'status.json', {'status': 'running', 'next_epoch': start_epoch})
-    for epoch in range(start_epoch, config['epochs']):
+    write_json(run_dir / 'status.json', {'status': 'running'})
+    for epoch in range(config['epochs']):
         started = time.time()
         train_loss, train_acc = train_epoch_batch(model, train_loader, loss_fn, optimizer, device,
                                                  clip_gradients=config['clip_gradients'])
@@ -180,23 +161,17 @@ def train_run(spec, store, config, out, resume=False):
             best_accuracy, best_epoch = val_acc, epoch + 1
             torch.save(model.state_dict(), run_dir / 'best.tmp')
             (run_dir / 'best.tmp').replace(run_dir / 'best.pt')
-        state = {'model': model.state_dict(), 'optimizer': optimizer.state_dict(),
-                 'epoch': epoch, 'history': history,
-                 'best_accuracy': best_accuracy, 'best_epoch': best_epoch, 'elapsed': elapsed,
-                 'python_rng': random.getstate(), 'numpy_rng': np.random.get_state(),
-                 'torch_rng': torch.get_rng_state(), 'cuda_rng': torch.cuda.get_rng_state_all(),
-                 'shuffle_rng': shuffle_rng.get_state()}
-        torch.save(state, run_dir / 'last.tmp')
-        (run_dir / 'last.tmp').replace(last_path)
         write_json(run_dir / 'history.json', history)
     # Test is evaluated only after the validation-selected checkpoint is loaded.
     model.load_state_dict(torch.load(run_dir / 'best.pt', map_location=device, weights_only=True))
     test_set = FGFeaturesDataset(store, 'test', spec['modalities'])
     test_loader = DataLoader(test_set, batch_size=config['batch_size'], collate_fn=collate)
     _, _, (truth, pred) = evaluate_batch(model, loss_fn, test_loader, device, return_preds=True)
+    # Average F1 over the classes present in the test set; absent classes would otherwise score 0.
+    labels = np.unique(truth)
     metrics = {**spec, 'accuracy': accuracy_score(truth, pred),
-               'macro_f1': f1_score(truth, pred, labels=list(range(100)), average='macro', zero_division=0),
-               'weighted_f1': f1_score(truth, pred, labels=list(range(100)), average='weighted', zero_division=0),
+               'macro_f1': f1_score(truth, pred, labels=labels, average='macro', zero_division=0),
+               'weighted_f1': f1_score(truth, pred, labels=labels, average='weighted', zero_division=0),
                'best_val_accuracy': best_accuracy, 'best_epoch': best_epoch,
                'parameters': sum(p.numel() for p in model.parameters()), 'training_seconds': elapsed,
                'peak_cuda_memory_bytes': torch.cuda.max_memory_allocated(), 'n_test': len(test_set)}
@@ -246,16 +221,14 @@ def main():
     parser.add_argument('action', choices=['audit', 'smoke', 'run', 'summarize'])
     parser.add_argument('--config', default='configs/fg2027.json')
     parser.add_argument('--dataset'); parser.add_argument('--model'); parser.add_argument('--modalities')
-    parser.add_argument('--seed', type=int); parser.add_argument('--resume', action='store_true')
+    parser.add_argument('--seed', type=int)
     args = parser.parse_args()
     config = json.loads(Path(args.config).read_text())
     out = Path(config['output_dir'])
     if args.action == 'summarize':
         summarize(config, out); return
-    if 'COLAB_RELEASE_TAG' not in os.environ:
-        raise RuntimeError('This project is configured for Google Colab only. Run the notebook there.')
     if args.action != 'audit' and not torch.cuda.is_available():
-        raise RuntimeError('Select a Colab GPU runtime before smoke tests or training.')
+        raise RuntimeError('No CUDA GPU available; smoke tests and training need one.')
     specs = [s for s in matrix(config) if all(getattr(args, k) is None or s[k] == getattr(args, k)
                                             for k in ('dataset', 'model', 'modalities', 'seed'))]
     if not specs:
@@ -285,7 +258,7 @@ def main():
             raise RuntimeError('Review data audit and provisional protocol decisions, then set protocol_reviewed=true and rerun smoke')
         for spec in (s for s in specs if s['dataset'] == dataset):
             try:
-                train_run(spec, store, config, out, args.resume)
+                train_run(spec, store, config, out)
             except Exception as error:
                 error_dir = out / run_name(spec)
                 if not (error_dir / 'metrics.json').exists():

@@ -1,25 +1,39 @@
 # FG2027 — paper notes
 
-Facts and decisions to carry into the paper. Numbers come from the Colab data audit
-(`data_audit.json`) unless marked otherwise. AVASAG figures are pending until its audit passes.
+Facts and decisions to carry into the paper. Numbers come from the data audit
+(`data_audit.json`) unless marked otherwise. Both audits passed on 2 October 2026.
 
 ## Data
 
+### Clips, classes and pose points
+
+| | WLASL100 | AVASAG100 |
+| --- | --- | --- |
+| Train / val / test clips | 1442 / 338 / 258 | 2596 / 849 / 890 |
+| Frames per clip (min–median–max) | 12–64–195 | 21–59–151 |
+| Train clips per class | 12–30 | 8–282 |
+| Test clips per class | 2–5 | 3–94 |
+
+- All 100 classes appear in every split of both datasets.
+- AVASAG is strongly imbalanced, so accuracy and macro-F1 can diverge there; report both.
+- The pose files store exactly 13 points. Their average positions match COCO body points 0–12:
+  nose, eyes, ears, shoulders, elbows, wrists, hips.
+
 ### Missing landmarks
 
-Share of coordinates with no detection, WLASL100 (ViTPose):
+Share of coordinates with no detection (ViTPose):
 
-| Modality | Missing coordinates | Clips with no detection at all |
-| --- | --- | --- |
-| Hands | 45.3% | 3 |
-| Pose (13 points) | 10.3% | 0 |
-| Face | 1.3% | 0 |
+| Modality | WLASL100 missing | WLASL100 clips with none | AVASAG100 missing | AVASAG100 clips with none |
+| --- | --- | --- | --- | --- |
+| Hands | 45.3% | 3 | 25.9% | 1 |
+| Pose (13 points) | 10.3% | 0 | 0.05% | 0 |
+| Face | 1.3% | 0 | 0.0% | 0 |
 
 - Hands are missing far more often than pose or face, so hands-only models train on sparse input.
   This belongs in the data description.
 - Not yet checked: whether this is mostly one hand at a time (e.g. the non-dominant hand
   out of frame) or both hands.
-- AVASAG: pending.
+- AVASAG has far fewer gaps than WLASL in every modality.
 
 ### Frames with more than one detected person
 
@@ -37,6 +51,8 @@ Share of coordinates with no detection, WLASL100 (ViTPose):
 
 - WLASL: hands range from −0.023 to 1.080 (1.3% of values outside [0, 1]); pose from 0.074 to
   1.232 (0.6%); face is fully inside (0.066–0.771).
+- AVASAG: hands 0.004 to 1.034 (0.7% outside); pose 0.002 to 1.010 and face 0.156 to 1.001
+  (both under 0.01% outside).
 - These are points the detector placed just past the frame edge, typically hands and hips below
   the bottom of the frame. They are kept unchanged, not clipped, to preserve the stored
   normalization. Values outside [−0.5, 1.5] would stop the loader as a scaling error.

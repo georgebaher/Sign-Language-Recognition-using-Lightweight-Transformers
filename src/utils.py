@@ -1,7 +1,7 @@
 import torch
 
 
-def train_epoch_batch(model, dataloader, loss_fn, optimizer, device, scheduler=None, clip_gradients=False, clip_weights=False):
+def train_epoch_batch(model, dataloader, loss_fn, optimizer, device, scheduler=None, clip_gradients=False):
     model.train()   # important for RNNs like LSTM for activating dropout layer
 
     pred_correct, pred_all = 0, 0
@@ -23,11 +23,10 @@ def train_epoch_batch(model, dataloader, loss_fn, optimizer, device, scheduler=N
         loss.backward()
 
         # Clip gradients to prevent them from exploding. clip_gradients is the
-        # max-norm threshold (0/False disables clipping).
-        if clip_gradients:
-            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=clip_gradients)
-
-        if any(p.grad is not None and not torch.isfinite(p.grad).all() for p in model.parameters()):
+        # max-norm threshold (0/False disables clipping via an infinite threshold).
+        # The returned total norm doubles as the non-finite gradient check.
+        total_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=clip_gradients or float('inf'))
+        if not torch.isfinite(total_norm):
             raise FloatingPointError("Non-finite gradients")
 
         # Step optimizer and scheduler
