@@ -1,5 +1,6 @@
 """Smoke tests (need a CUDA GPU): meaningful masking, padding, alignment, and leakage checks."""
 import torch
+from src import console
 from src.models.EncoderOnlyTransformer import EncoderOnly
 from src.models.SPOTER import SPOTERTransformer
 from src.models.BiLSTM import BiLSTMClassifier
@@ -27,7 +28,7 @@ def check_reporting():
         rows = list(csv.DictReader((out / 'results.csv').open()))
         assert len(rows) == 22 and sum(r['status'] == 'completed' for r in rows) == 1
         assert '| 1/1 | 50.00 | 40.00 | 45.00 | 7.94M |' in (out / 'results.md').read_text()
-    print('Single-seed matrix and reporting: PASS')
+    console.line(f"  {console.green('✓')} Single-seed matrix and reporting")
 
 
 def check_models():
@@ -60,7 +61,7 @@ def check_models():
             loss = torch.nn.functional.cross_entropy(model(values, lengths), torch.tensor([1, 2], device='cuda'))
             loss.backward()
             assert all(p.grad is None or torch.isfinite(p.grad).all() for p in model.parameters())
-    print('Model masking, missing-frame, padding invariance, gradients: PASS')
+    console.line(f"  {console.green('✓')} Model masking, missing-frame, padding invariance, gradients")
 
 
 def check_data():
@@ -151,4 +152,4 @@ def check_data():
             assert 'Duplicate video ID' in str(error)
         else:
             raise AssertionError('Split overlap was accepted')
-    print('Frame alignment, modality widths, common cohort, duplicate/leakage rejection: PASS')
+    console.line(f"  {console.green('✓')} Frame alignment, modality widths, common cohort, duplicate/leakage rejection")
