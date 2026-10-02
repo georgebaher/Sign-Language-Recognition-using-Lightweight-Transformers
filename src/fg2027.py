@@ -200,6 +200,10 @@ def train_run(spec, store, config, out, resume=False):
                'best_val_accuracy': best_accuracy, 'best_epoch': best_epoch,
                'parameters': sum(p.numel() for p in model.parameters()), 'training_seconds': elapsed,
                'peak_cuda_memory_bytes': torch.cuda.max_memory_allocated(), 'n_test': len(test_set)}
+    if isinstance(model, FGLateFusion):
+        # Learned contribution of each modality in the selected checkpoint (softmax, sums to 1).
+        metrics['fusion_weights'] = dict(zip(MODALITIES[spec['modalities']],
+                                             model.fusion_weights.softmax(0).tolist()))
     with (run_dir / 'predictions.csv').open('w') as stream:
         writer = csv.writer(stream); writer.writerow(['video_id', 'y_true', 'y_pred'])
         writer.writerows(zip(test_set.ids, truth, pred))
@@ -228,9 +232,11 @@ def summarize(config, out):
                 line.append(f'{np.mean(values):.2f} ± {np.std(values, ddof=1):.2f}')
             else:
                 line.append(f'{values[0]:.2f}' if values else 'Pending')
+        parameters = [r['parameters'] for r in available if 'parameters' in r]
+        line.append(f'{parameters[0] / 1e6:.2f}M' if parameters else 'Pending')
         grouped.append('| ' + ' | '.join(line) + ' |')
-    (out / 'results.md').write_text('| Dataset | Model | Input | Seeds | Accuracy | Macro F1 | Weighted F1 |\n'
-        '|---|---|---|---|---|---|---|\n' + '\n'.join(grouped) +
+    (out / 'results.md').write_text('| Dataset | Model | Input | Seeds | Accuracy | Macro F1 | Weighted F1 | Parameters |\n'
+        '|---|---|---|---|---|---|---|---|\n' + '\n'.join(grouped) +
         '\n\nOne completed seed: score only. Multiple completed seeds: mean ± sample SD, not confidence intervals.\n')
     print(out / 'results.csv')
 

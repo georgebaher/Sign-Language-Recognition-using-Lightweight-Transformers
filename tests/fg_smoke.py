@@ -21,11 +21,12 @@ def check_reporting():
         spec = specs[0]
         path = out / run_name(spec) / 'metrics.json'
         path.parent.mkdir(parents=True)
-        path.write_text(json.dumps({**spec, 'accuracy': .5, 'macro_f1': .4, 'weighted_f1': .45}))
+        path.write_text(json.dumps({**spec, 'accuracy': .5, 'macro_f1': .4, 'weighted_f1': .45,
+                                    'parameters': 7_940_000}))
         summarize(config, out)
         rows = list(csv.DictReader((out / 'results.csv').open()))
         assert len(rows) == 22 and sum(r['status'] == 'completed' for r in rows) == 1
-        assert '| 1/1 | 50.00 | 40.00 | 45.00 |' in (out / 'results.md').read_text()
+        assert '| 1/1 | 50.00 | 40.00 | 45.00 | 7.94M |' in (out / 'results.md').read_text()
     print('Single-seed matrix and reporting: PASS')
 
 
