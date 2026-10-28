@@ -43,3 +43,16 @@ Completed runs are skipped. Interrupted runs **restart from epoch 1**.
 Changed data, code or configuration require new smoke tests and a separate output
 directory. Checkpoints stay local; committed predictions and run records support
 result review without retraining.
+
+## Analyse the completed runs
+
+No GPU, raw landmarks or retraining are needed. From the repository root:
+
+```bash
+python -m pip install numpy scikit-learn matplotlib
+python analysis/validate_results.py . analysis/output
+```
+
+The script checks all 22 runs and recomputes accuracy and F1 from saved predictions. It writes the results table, approximate intervals, full confusion matrices, error clip lists and paired prediction changes to `analysis/output`. It stops on inconsistent records. Run without Python's `-O` option.
+
+Intervals reproduce the IberSPEECH calculator for every metric; the F1 margins are a heuristic approximation, and none measure variation across seeds. Confusion analysis describes the highest observed test-accuracy model per dataset. Generated files do not overwrite the paper's manually editable `main.tex`.

@@ -38,3 +38,6 @@ evaluation_results/
 !runs/**/*.txt
 runs/**/*.pt
 runs/**/*.tmp
+
+# Regenerated paper analysis
+analysis/output/
